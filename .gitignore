@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+.DS_Store
+*.log
+npm-debug.log*
+.vite/
+coverage/
+
+# Local PGlite data (offline-first DB for the local module)
+server/data/

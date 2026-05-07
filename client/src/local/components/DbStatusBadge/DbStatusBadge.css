@@ -1,0 +1,50 @@
+.db-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text-muted);
+}
+
+.db-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 0 currentColor;
+}
+
+.db-status--ok {
+  color: #137a3f;
+  background: #e9f6ee;
+  border-color: #c0e3cd;
+}
+.db-status--ok .db-status-dot {
+  animation: db-pulse 2s ease-in-out infinite;
+}
+
+.db-status--error {
+  color: var(--maroon);
+  background: var(--maroon-soft);
+  border-color: var(--maroon);
+}
+
+.db-status--checking {
+  color: #8a6d1f;
+  background: #fbf3df;
+  border-color: #ecd9a4;
+}
+.db-status--checking .db-status-dot {
+  animation: db-pulse 1s ease-in-out infinite;
+}
+
+@keyframes db-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+  50%      { box-shadow: 0 0 0 4px rgba(0,0,0,0); opacity: 0.55; }
+}

@@ -1,0 +1,343 @@
+.records-page {
+  flex: 1;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.records-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.records-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.records-sub {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+/* ── Top bar ─────────────────────────────────────────────── */
+.records-topbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 18px;
+}
+
+.records-count {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.records-count-num {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--maroon);
+  line-height: 1;
+}
+
+.records-count-label {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.records-capped {
+  font-size: 0.8rem;
+  color: var(--maroon);
+  font-style: italic;
+}
+
+.records-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.records-filter-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-muted);
+}
+
+.records-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.records-clear-btn {
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  flex-shrink: 0;
+}
+
+/* Session picker button (replaces <select>) */
+.records-session-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.92rem;
+  cursor: pointer;
+  min-width: 260px;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.records-session-btn:hover,
+.records-session-btn:focus-visible {
+  border-color: var(--maroon);
+  box-shadow: 0 0 0 3px var(--maroon-soft);
+  outline: none;
+}
+.records-session-btn.has-value {
+  color: var(--text);
+  font-weight: 500;
+  border-color: var(--maroon);
+}
+.records-session-caret {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Session list inside modal */
+.session-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.session-modal-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.session-modal-item:hover {
+  border-color: var(--maroon);
+  background: var(--maroon-soft);
+}
+.session-modal-item.is-active {
+  border-color: var(--maroon);
+  background: var(--maroon-soft);
+  font-weight: 600;
+}
+
+.session-modal-brgy { flex: 1; font-size: 0.93rem; }
+.session-modal-date {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.session-modal-item.is-active .session-modal-date { color: var(--maroon); }
+
+.session-modal-item--office {
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+.session-modal-item--office .session-modal-date { color: #93c5fd; }
+.session-modal-item--office:hover {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+.session-modal-item--office.is-active {
+  background: #dbeafe;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+.session-modal-item--office.is-active .session-modal-date { color: #2563eb; }
+
+.records-search-bar .encode-input {
+  width: 100%;
+}
+
+.records-state {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  font-style: italic;
+  padding: 40px 0;
+  text-align: center;
+}
+
+/* ── Record list ─────────────────────────────────────────── */
+.records-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.records-card {
+  display: grid;
+  grid-template-columns: 100px 1fr auto;
+  gap: 0 16px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 18px;
+  transition: border-color 0.15s ease;
+}
+
+.records-card:hover { border-color: #c9d3dd; }
+
+/* Date + location tag column */
+.records-card-date {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.records-date-main {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--maroon);
+}
+
+.records-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  width: fit-content;
+}
+
+.records-tag--office { background: #dbeafe; color: #1d4ed8; }
+.records-tag--drive  { background: var(--maroon-soft); color: var(--maroon); }
+
+/* Body */
+.records-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.records-card-top {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.records-card-pet    { font-weight: 600; font-size: 0.95rem; }
+.records-card-pettype { font-weight: 400; color: var(--text-muted); font-size: 0.85rem; }
+.records-card-owner  { font-size: 0.85rem; color: var(--text-muted); }
+
+.records-card-detail {
+  font-size: 0.88rem;
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.records-card-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.records-card-code {
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-size: 0.78rem;
+  color: var(--maroon);
+  letter-spacing: 0.04em;
+}
+
+/* Actions column */
+.records-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+/* Both action buttons share the same base sizing */
+.records-action-btn,
+.records-del-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 6px 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.records-action-btn {
+  background: #fff;
+  color: var(--maroon);
+  border: 1px solid var(--maroon);
+}
+.records-action-btn:hover {
+  background: var(--maroon-soft);
+  color: var(--maroon-deep);
+}
+
+.records-del-btn {
+  background: none;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+.records-del-btn:hover { background: #fef2f2; border-color: #dc2626; }
+
+/* Edit form inside modal */
+.records-edit-form {
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 760px) {
+  .records-card { grid-template-columns: 1fr; gap: 10px; }
+  .records-card-date { flex-direction: row; align-items: center; }
+  .records-card-actions { flex-direction: row; }
+  .records-filter-select { min-width: 160px; }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "digivetsystem",
+  "version": "0.1.0",
+  "private": true,
+  "description": "DIGIVET — pet vaccination encoding/record system for the Lipa City Veterinary Office",
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "install:all": "npm install && npm install --prefix server && npm install --prefix client",
+    "start:server": "npm start --prefix server",
+    "build:client": "npm run build --prefix client"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  }
+}
