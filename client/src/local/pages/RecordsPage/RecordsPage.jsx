@@ -19,6 +19,7 @@ export default function RecordsPage() {
   const [petSearch, setPetSearch]           = useState('')
   const [records, setRecords]           = useState([])
   const [loading, setLoading]           = useState(true)
+  const [viewTarget, setViewTarget]     = useState(null)
   const [editTarget, setEditTarget]     = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [flash, setFlash]               = useState(null)
@@ -195,7 +196,11 @@ export default function RecordsPage() {
       ) : (
         <ul className="records-list">
           {displayRecords.map((r) => (
-            <li key={r.vaccine_id} className="records-card">
+            <li
+              key={r.vaccine_id}
+              className="records-card records-card--clickable"
+              onClick={() => setViewTarget(r)}
+            >
               <div className="records-card-date">
                 <span className="records-date-main">{fmtDate(r.vaccine_date)}</span>
                 <span className={`records-tag records-tag--${r.is_office_visit ? 'office' : 'drive'}`}>
@@ -223,7 +228,7 @@ export default function RecordsPage() {
                 </div>
               </div>
 
-              <div className="records-card-actions">
+              <div className="records-card-actions" onClick={(e) => e.stopPropagation()}>
                 <button
                   type="button"
                   className="btn btn-outline records-action-btn"
@@ -242,6 +247,16 @@ export default function RecordsPage() {
             </li>
           ))}
         </ul>
+      )}
+
+      {viewTarget && (
+        <RecordViewModal
+          record={viewTarget}
+          sessions={sessions}
+          onClose={() => setViewTarget(null)}
+          onEdit={(r)   => { setViewTarget(null); setEditTarget(r) }}
+          onDelete={(r) => { setViewTarget(null); setDeleteTarget(r) }}
+        />
       )}
 
       {editTarget && (
@@ -362,6 +377,98 @@ export default function RecordsPage() {
         </div>
       )}
     </main>
+  )
+}
+
+function RecordViewModal({ record: r, sessions, onClose, onEdit, onDelete }) {
+  const session = sessions.find((s) => s.session_id === r.session_id)
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal record-view-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Vaccination record detail"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header — mirrors hero-card-head */}
+        <div className="rvm-head">
+          <div className="rvm-head-left">
+            <span className="rvm-title">Vaccination Record</span>
+            <span className="rvm-id">#{String(r.vaccine_id).padStart(5, '0')}</span>
+          </div>
+          <div className="rvm-head-right">
+            <span className={`records-tag records-tag--${r.is_office_visit ? 'office' : 'drive'}`}>
+              {r.is_office_visit ? 'Pet Office' : 'Drive'}
+            </span>
+            <button type="button" className="modal-close-btn" onClick={onClose}>×</button>
+          </div>
+        </div>
+
+        {/* Rows — mirrors hero-card-row */}
+        <div className="rvm-rows">
+          <div className="rvm-row">
+            <span className="rvm-label">Pet</span>
+            <span className="rvm-value">
+              {r.pet_name}
+              {r.pet_type && ` · ${r.pet_type}`}
+              {r.pet_age  && ` · ${r.pet_age}`}
+            </span>
+          </div>
+          <div className="rvm-row">
+            <span className="rvm-label">Owner</span>
+            <span className="rvm-value">{r.owner_name ?? '—'}</span>
+          </div>
+          <div className="rvm-row">
+            <span className="rvm-label">Vaccine</span>
+            <span className="rvm-value">
+              <span className="rvm-tick" aria-hidden="true" />
+              {r.vaccine_details}
+            </span>
+          </div>
+          <div className="rvm-row">
+            <span className="rvm-label">Approval ID</span>
+            <span className="rvm-value rvm-code">{r.approval_code ?? '—'}</span>
+          </div>
+          <div className="rvm-row">
+            <span className="rvm-label">Veterinarian</span>
+            <span className="rvm-value">{r.vet_name ?? '—'}</span>
+          </div>
+          <div className="rvm-row">
+            <span className="rvm-label">Lot #</span>
+            <span className="rvm-value">{r.manufacturer_no}</span>
+          </div>
+          <div className="rvm-row">
+            <span className="rvm-label">Date</span>
+            <span className="rvm-value">{fmtDate(r.vaccine_date)}</span>
+          </div>
+          {session ? (
+            <div className="rvm-row">
+              <span className="rvm-label">Session</span>
+              <span className="rvm-value">
+                {session.barangay_name} · {fmtDate(session.session_date)}
+              </span>
+            </div>
+          ) : r.is_office_visit ? (
+            <div className="rvm-row">
+              <span className="rvm-label">Session</span>
+              <span className="rvm-value" style={{ color: 'var(--text-muted)' }}>Pet Office visit</span>
+            </div>
+          ) : null}
+        </div>
+
+        {/* Actions */}
+        <div className="rvm-actions">
+          <button type="button" className="btn btn-outline rvm-action-btn" onClick={() => onEdit(r)}>
+            Edit
+          </button>
+          <button type="button" className="rvm-delete-btn" onClick={() => onDelete(r)}>
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 

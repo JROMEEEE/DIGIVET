@@ -6,17 +6,19 @@ import { api } from '../../api'
 import './DashboardLayout.css'
 
 const navItems = [
-  { to: '/dashboard',           label: 'Overview',       icon: 'OV', end: true },
-  { to: '/dashboard/encode',    label: 'Encode',         icon: 'EN' },
-  { to: '/dashboard/records',   label: 'Records',        icon: 'RC' },
-  { to: '/dashboard/vets',      label: 'Veterinarians',  icon: 'VT' },
+  { to: '/dashboard',             label: 'Overview',       icon: 'OV', end: true },
+  { to: '/dashboard/encode',      label: 'Encode',         icon: 'EN' },
+  { to: '/dashboard/records',     label: 'Records',        icon: 'RC' },
+  { to: '/dashboard/analytics',   label: 'Analytics',      icon: 'AN' },
+  { to: '/dashboard/vets',        label: 'Veterinarians',  icon: 'VT' },
 ]
 
 const titles = {
-  '/dashboard':          { title: 'Dashboard',     crumb: 'Admin · Overview' },
-  '/dashboard/encode':   { title: 'Encode',        crumb: 'Admin · Encoding' },
-  '/dashboard/records':  { title: 'Records',       crumb: 'Admin · Records' },
-  '/dashboard/vets':     { title: 'Veterinarians', crumb: 'Admin · Veterinarians' },
+  '/dashboard':               { title: 'Dashboard',     crumb: 'Admin · Overview' },
+  '/dashboard/encode':        { title: 'Encode',        crumb: 'Admin · Encoding' },
+  '/dashboard/records':       { title: 'Records',       crumb: 'Admin · Records' },
+  '/dashboard/analytics':     { title: 'Analytics',     crumb: 'Admin · Analytics' },
+  '/dashboard/vets':          { title: 'Veterinarians', crumb: 'Admin · Veterinarians' },
 }
 
 function initials(name) {

@@ -7,6 +7,7 @@ import DashboardLayout    from './local/pages/DashboardLayout/DashboardLayout'
 import DashboardOverview  from './local/pages/DashboardOverview/DashboardOverview'
 import EncodePage         from './local/pages/EncodePage/EncodePage'
 import RecordsPage        from './local/pages/RecordsPage/RecordsPage'
+import AnalyticsPage      from './local/pages/AnalyticsPage/AnalyticsPage'
 import VeterinariansPage  from './local/pages/VeterinariansPage/VeterinariansPage'
 import './shared/styles/components.css'
 
@@ -34,8 +35,9 @@ function AppRoutes() {
       <Route path="/dashboard" element={<AdminRoute><DashboardLayout /></AdminRoute>}>
         <Route index          element={<DashboardOverview />} />
         <Route path="encode"  element={<EncodePage />} />
-        <Route path="records" element={<RecordsPage />} />
-        <Route path="vets"    element={<VeterinariansPage />} />
+        <Route path="records"    element={<RecordsPage />} />
+        <Route path="analytics"  element={<AnalyticsPage />} />
+        <Route path="vets"       element={<VeterinariansPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

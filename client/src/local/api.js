@@ -42,6 +42,17 @@ export const api = {
   stats: {
     get: () => request('/stats'),
   },
+  analytics: {
+    ping:             () => request('/analytics/ping'),
+    testDb:           () => request('/analytics/test-db'),
+    barangayCoverage: ({ q, limit } = {}) => {
+      const qs = new URLSearchParams()
+      if (q)     qs.set('q',     q)
+      if (limit) qs.set('limit', String(limit))
+      const s = qs.toString()
+      return request(`/analytics/barangay-coverage${s ? '?' + s : ''}`)
+    },
+  },
   barangays: {
     list: () => request('/barangays'),
     create: (b) => request('/barangays', { method: 'POST', body: b }),

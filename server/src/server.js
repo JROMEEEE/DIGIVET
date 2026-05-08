@@ -10,8 +10,9 @@ import ownersRouter from './routes/owners.js';
 import petsRouter from './routes/pets.js';
 import vaccinationsRouter from './routes/vaccinations.js';
 import driveSessionsRouter from './routes/drive-sessions.js';
-import statsRouter from './routes/stats.js';
-import authRouter  from './routes/auth.js';
+import statsRouter     from './routes/stats.js';
+import analyticsRouter from './routes/analytics.js';
+import authRouter      from './routes/auth.js';
 import { bootstrapSchema } from './local/db.js';
 
 const app = express();
@@ -30,7 +31,8 @@ app.use('/api/owners', ownersRouter);
 app.use('/api/pets', petsRouter);
 app.use('/api/vaccinations', vaccinationsRouter);
 app.use('/api/drive-sessions', driveSessionsRouter);
-app.use('/api/stats', statsRouter);
+app.use('/api/stats',     statsRouter);
+app.use('/api/analytics', analyticsRouter);
 
 app.get('/', (_req, res) => {
   res.json({ name: 'digivet-server', status: 'ok' });

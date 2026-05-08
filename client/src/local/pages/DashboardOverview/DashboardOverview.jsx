@@ -4,9 +4,10 @@ import { api } from '../../api'
 import './DashboardOverview.css'
 
 const MODULES = [
-  { to: '/dashboard/encode',  icon: 'EN', name: 'Encode',        desc: 'Record a new vaccination' },
-  { to: '/dashboard/records', icon: 'RC', name: 'Records',       desc: 'View, edit, delete entries' },
-  { to: '/dashboard/vets',    icon: 'VT', name: 'Veterinarians', desc: 'Manage vets & approval IDs' },
+  { to: '/dashboard/encode',     icon: 'EN', name: 'Encode',        desc: 'Record a new vaccination' },
+  { to: '/dashboard/records',    icon: 'RC', name: 'Records',       desc: 'View, edit, delete entries' },
+  { to: '/dashboard/analytics',  icon: 'AN', name: 'Analytics',     desc: 'Coverage insights & reports' },
+  { to: '/dashboard/vets',       icon: 'VT', name: 'Veterinarians', desc: 'Manage vets & approval IDs' },
 ]
 
 const STAT_CARDS = (s) => [

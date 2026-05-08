@@ -217,6 +217,11 @@
 }
 
 .records-card:hover { border-color: #c9d3dd; }
+.records-card--clickable { cursor: pointer; }
+.records-card--clickable:hover {
+  border-color: var(--maroon);
+  box-shadow: 0 2px 10px rgba(122, 31, 43, 0.08);
+}
 
 /* Date + location tag column */
 .records-card-date {
@@ -334,6 +339,132 @@
 .records-edit-form {
   grid-template-columns: 1fr 1fr;
 }
+
+/* ── Record view modal (hero-card style) ─────────────────── */
+.record-view-modal {
+  max-width: 440px;
+  padding: 0;
+}
+
+.rvm-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1.5px dashed var(--border);
+  margin-bottom: 0;
+}
+
+.rvm-head-left {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.rvm-title {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.rvm-id {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.rvm-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rvm-rows {
+  padding: 0 20px;
+}
+
+.rvm-row {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 8px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.93rem;
+  align-items: start;
+}
+.rvm-row:last-child { border-bottom: none; }
+
+.rvm-label {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.rvm-value {
+  font-weight: 500;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rvm-code {
+  font-family: ui-monospace, 'Cascadia Code', monospace;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--maroon);
+  letter-spacing: 0.05em;
+}
+
+/* Green checkmark — mirrors landing page .tick */
+.rvm-tick {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  background: var(--maroon);
+  flex-shrink: 0;
+  position: relative;
+}
+.rvm-tick::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  width: 5px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.rvm-actions {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--border);
+  margin-top: 0;
+}
+
+.rvm-action-btn {
+  flex: 1;
+  justify-content: center;
+  padding: 8px;
+  font-size: 0.88rem;
+}
+
+.rvm-delete-btn {
+  flex: 1;
+  background: none;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  color: #dc2626;
+  padding: 8px;
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: center;
+}
+.rvm-delete-btn:hover { background: #fef2f2; }
 
 @media (max-width: 760px) {
   .records-card { grid-template-columns: 1fr; gap: 10px; }
