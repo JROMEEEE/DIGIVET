@@ -55,18 +55,21 @@ function(req, res, q = "", limit = "50") {
     df <- dbGetQuery(con, "
       SELECT
         b.barangay_name,
-        COUNT(DISTINCT v.vaccine_id)::int  AS vaccination_count,
-        COUNT(DISTINCT p.pet_id)::int      AS total_pets
+        COUNT(DISTINCT v.vaccine_id)::int                              AS vaccination_count,
+        COUNT(DISTINCT p.pet_id)::int                                  AS total_pets,
+        COUNT(DISTINCT CASE WHEN v.vaccine_id IS NOT NULL
+                            THEN p.pet_id END)::int                    AS vaccinated_pets
       FROM barangay_table b
-      LEFT JOIN owner_table  o ON o.barangay_id = b.barangay_id
-      LEFT JOIN pet_table    p ON p.owner_id     = o.owner_id
-      LEFT JOIN vaccine_table v ON v.pet_id      = p.pet_id
+      LEFT JOIN owner_table   o ON o.barangay_id = b.barangay_id
+      LEFT JOIN pet_table     p ON p.owner_id     = o.owner_id
+      LEFT JOIN vaccine_table v ON v.pet_id       = p.pet_id
       GROUP BY b.barangay_id, b.barangay_name
       ORDER BY vaccination_count DESC
     ")
 
+    # Coverage = pets with at least one vaccination / total registered pets
     df$coverage_rate <- round(
-      df$vaccination_count / pmax(df$total_pets, 1) * 100, 1
+      df$vaccinated_pets / pmax(df$total_pets, 1) * 100, 1
     )
 
     if (nchar(trimws(q)) > 0) {

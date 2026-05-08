@@ -185,7 +185,7 @@ function BarangayCoverageModal({ onClose }) {
               <div className="coverage-col-head">
                 <span>#</span>
                 <span>Barangay</span>
-                <span>Vaccinations</span>
+                <span>Vaccinated Pets</span>
                 <span>Registered Pets</span>
                 <span>Coverage</span>
               </div>
@@ -196,7 +196,7 @@ function BarangayCoverageModal({ onClose }) {
                     <li key={d.barangay_name} className="coverage-row">
                       <span className="coverage-rank">#{rank}</span>
                       <span className="coverage-name">{d.barangay_name}</span>
-                      <span className="coverage-vax">{d.vaccination_count.toLocaleString()}</span>
+                      <span className="coverage-vax">{d.vaccinated_pets?.toLocaleString() ?? d.vaccination_count.toLocaleString()}</span>
                       <span className="coverage-pets">{d.total_pets.toLocaleString()}</span>
                       <div className="coverage-rate-cell">
                         <div className="coverage-rate-track">
