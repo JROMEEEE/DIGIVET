@@ -11,6 +11,7 @@ import petsRouter from './routes/pets.js';
 import vaccinationsRouter from './routes/vaccinations.js';
 import driveSessionsRouter from './routes/drive-sessions.js';
 import statsRouter from './routes/stats.js';
+import authRouter  from './routes/auth.js';
 import { bootstrapSchema } from './local/db.js';
 
 const app = express();
@@ -20,6 +21,7 @@ app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173' }));
 app.use(express.json());
 app.use(morgan('dev'));
 
+app.use('/api/auth',   authRouter);
 app.use('/api/health', healthRouter);
 app.use('/api/barangays', barangaysRouter);
 app.use('/api/vets', vetsRouter);

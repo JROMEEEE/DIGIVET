@@ -3,11 +3,19 @@
 -- Adds auto-increment sequences to the existing *_table primary-key columns
 -- so INSERTs don't have to provide IDs manually.
 
--- Create drive_session_table before sequence setup so the DO block can attach to it.
+-- Ensure tables that may not exist yet are created before the sequence loop.
 CREATE TABLE IF NOT EXISTS drive_session_table (
   session_id   INT  PRIMARY KEY,
   barangay_id  INT  NOT NULL,
   session_date DATE NOT NULL DEFAULT CURRENT_DATE
+);
+
+CREATE TABLE IF NOT EXISTS user_table (
+  user_id INT PRIMARY KEY
+);
+
+CREATE TABLE IF NOT EXISTS userinfo_table (
+  userinfo_id INT PRIMARY KEY
 );
 
 DO $$
@@ -28,6 +36,14 @@ BEGIN
       ('drive_session_table',  'session_id')
     ) AS t(table_name, pk_col)
   LOOP
+    -- Skip tables that don't exist so one missing table doesn't abort the whole block
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = rec.table_name
+    ) THEN
+      CONTINUE;
+    END IF;
+
     seq_name := rec.table_name || '_' || rec.pk_col || '_seq';
 
     -- Create sequence if it doesn't exist
@@ -60,8 +76,13 @@ BEGIN
   END LOOP;
 END $$;
 
+-- Add auth columns to user_table (idempotent).
+-- Note: the original `password` column stores the bcrypt hash — no separate password_hash needed.
+ALTER TABLE user_table ADD COLUMN IF NOT EXISTS email        VARCHAR(255);
+ALTER TABLE user_table ADD COLUMN IF NOT EXISTS role         VARCHAR(10)  NOT NULL DEFAULT 'USER';
+ALTER TABLE user_table ADD COLUMN IF NOT EXISTS display_name VARCHAR(255);
+ALTER TABLE user_table ADD COLUMN IF NOT EXISTS created_at   TIMESTAMPTZ  DEFAULT NOW();
+
 -- Add new columns to vaccine_table (idempotent).
--- session_id links a vaccination to a barangay drive session (nullable = office visit with no session).
--- is_office_visit distinguishes clinic visits from on-site drive vaccinations.
 ALTER TABLE vaccine_table ADD COLUMN IF NOT EXISTS session_id      INT;
 ALTER TABLE vaccine_table ADD COLUMN IF NOT EXISTS is_office_visit BOOL NOT NULL DEFAULT FALSE;

@@ -494,6 +494,34 @@ function DriveSetup({ barangays, onSelect, onBack, flash, error }) {
 
       <section className="encode-step">
         <header className="encode-step-head">
+          <span className="encode-step-num" aria-hidden="true">+</span>
+          <h3>New session</h3>
+        </header>
+        <div className="encode-step-body">
+          <form className="encode-form" onSubmit={startSession}>
+            <label>Barangay
+              <select required value={barangayId} onChange={(e) => setBarangayId(e.target.value)} className="encode-input">
+                <option value="">— select —</option>
+                {barangays.map((b) => (
+                  <option key={b.barangay_id} value={b.barangay_id}>{b.barangay_name}</option>
+                ))}
+              </select>
+            </label>
+            <label>Session date
+              <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="encode-input" />
+            </label>
+            <div className="encode-form-actions">
+              <button type="button" className="btn btn-outline" onClick={onBack}>← Back</button>
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? 'Starting…' : 'Start session'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+      
+      <section className="encode-step">
+        <header className="encode-step-head">
           <span className="encode-step-num" aria-hidden="true">S</span>
           <h3>Find session</h3>
         </header>
@@ -528,33 +556,7 @@ function DriveSetup({ barangays, onSelect, onBack, flash, error }) {
         </div>
       </section>
 
-      <section className="encode-step">
-        <header className="encode-step-head">
-          <span className="encode-step-num" aria-hidden="true">+</span>
-          <h3>New session</h3>
-        </header>
-        <div className="encode-step-body">
-          <form className="encode-form" onSubmit={startSession}>
-            <label>Barangay
-              <select required value={barangayId} onChange={(e) => setBarangayId(e.target.value)} className="encode-input">
-                <option value="">— select —</option>
-                {barangays.map((b) => (
-                  <option key={b.barangay_id} value={b.barangay_id}>{b.barangay_name}</option>
-                ))}
-              </select>
-            </label>
-            <label>Session date
-              <input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className="encode-input" />
-            </label>
-            <div className="encode-form-actions">
-              <button type="button" className="btn btn-outline" onClick={onBack}>← Back</button>
-              <button type="submit" className="btn btn-primary" disabled={saving}>
-                {saving ? 'Starting…' : 'Start session'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </section>
+      
     </main>
   )
 }

@@ -1,9 +1,19 @@
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:5001/api';
 
+function getToken() {
+  try { return localStorage.getItem('digivet_token') ?? undefined }
+  catch { return undefined }
+}
+
 async function request(path, { method = 'GET', body, signal } = {}) {
+  const token = getToken()
+  const headers = {}
+  if (body)  headers['Content-Type'] = 'application/json'
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
   const res = await fetch(`${API_BASE}${path}`, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    headers,
     body: body ? JSON.stringify(body) : undefined,
     signal,
   });
@@ -19,6 +29,13 @@ async function request(path, { method = 'GET', body, signal } = {}) {
 }
 
 export const api = {
+  auth: {
+    register: (body) => request('/auth/register', { method: 'POST', body }),
+    login:    (body) => request('/auth/login',    { method: 'POST', body }),
+    me:       ()     => request('/auth/me'),
+    updateMe: (body) => request('/auth/me', { method: 'PUT',    body }),
+    deleteMe: ()     => request('/auth/me', { method: 'DELETE' }),
+  },
   health: {
     db: (signal) => request('/health/db', { signal }),
   },
@@ -66,7 +83,7 @@ export const api = {
   pets: {
     list: ({ owner_id, barangay_id } = {}) => {
       const qs = new URLSearchParams()
-      if (owner_id != null)   qs.set('owner_id', String(owner_id))
+      if (owner_id != null)    qs.set('owner_id', String(owner_id))
       if (barangay_id != null) qs.set('barangay_id', String(barangay_id))
       const search = qs.toString()
       return request(`/pets${search ? `?${search}` : ''}`)
