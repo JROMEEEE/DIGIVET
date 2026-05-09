@@ -42,6 +42,13 @@ export const api = {
   stats: {
     get: () => request('/stats'),
   },
+  sync: {
+    connectivity: ()      => request('/sync/connectivity'),
+    status:       ()      => request('/sync/status'),
+    pending:      (table) => request(`/sync/pending/${encodeURIComponent(table)}`),
+    log:          ()      => request('/sync/log'),
+    push:         ()      => request('/sync/push', { method: 'POST' }),
+  },
   analytics: {
     ping:             () => request('/analytics/ping'),
     testDb:           () => request('/analytics/test-db'),
@@ -100,8 +107,10 @@ export const api = {
       qs.set('limit', String(limit))
       return request(`/owners?${qs}`, { signal })
     },
-    get: (id) => request(`/owners/${id}`),
-    create: (o) => request('/owners', { method: 'POST', body: o }),
+    get:    (id)       => request(`/owners/${id}`),
+    create: (o)        => request('/owners',     { method: 'POST',   body: o }),
+    update: (id, body) => request(`/owners/${id}`, { method: 'PUT',  body }),
+    remove: (id)       => request(`/owners/${id}`, { method: 'DELETE' }),
   },
   pets: {
     list: ({ owner_id, barangay_id } = {}) => {
@@ -111,8 +120,10 @@ export const api = {
       const search = qs.toString()
       return request(`/pets${search ? `?${search}` : ''}`)
     },
-    get: (id) => request(`/pets/${id}`),
-    create: (p) => request('/pets', { method: 'POST', body: p }),
+    get:    (id)       => request(`/pets/${id}`),
+    create: (p)        => request('/pets',       { method: 'POST',   body: p }),
+    update: (id, body) => request(`/pets/${id}`, { method: 'PUT',    body }),
+    remove: (id)       => request(`/pets/${id}`, { method: 'DELETE' }),
   },
   vaccinations: {
     list: (pet_id) => request(`/vaccinations${pet_id ? `?pet_id=${pet_id}` : ''}`),

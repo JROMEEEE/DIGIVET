@@ -1,6 +1,7 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import { pool, query } from '../local/db.js';
+import { syncRecord } from '../lib/syncRecord.js';
 
 const router = express.Router();
 
@@ -41,6 +42,8 @@ router.get('/', async (req, res) => {
   if (is_office_visit === 'true') {
     conditions.push(`v.is_office_visit = TRUE`);
   }
+  // Always exclude soft-deleted records
+  conditions.push(`v.deleted_at IS NULL`);
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -58,53 +61,44 @@ router.get('/', async (req, res) => {
   res.json(rows);
 });
 
-router.put('/:id', async (req, res) => {
-  const { vaccine_date, vet_id, vaccine_details, manufacturer_no, is_office_visit } = req.body ?? {};
-  if (!vaccine_date || !vet_id || !vaccine_details || !manufacturer_no) {
-    return res.status(400).json({
-      error: 'vaccine_date, vet_id, vaccine_details, and manufacturer_no are required',
-    });
-  }
-  const { rows } = await query(
-    `UPDATE vaccine_table
-     SET vaccine_date = $1, vet_id = $2, vaccine_details = $3,
-         manufacturer_no = $4, is_office_visit = $5
-     WHERE vaccine_id = $6
-     RETURNING vaccine_id, pet_id, vet_id, vaccine_date, vaccine_details,
-               manufacturer_no, session_id, is_office_visit`,
-    [vaccine_date, Number(vet_id), vaccine_details, manufacturer_no,
-     is_office_visit ?? false, req.params.id],
-  );
-  if (!rows[0]) return res.status(404).json({ error: 'Record not found' });
-  res.json(rows[0]);
+router.put('/:id', async (req, res, next) => {
+  try {
+    const { vaccine_date, vet_id, vaccine_details, manufacturer_no, is_office_visit } = req.body ?? {};
+    if (!vaccine_date || !vet_id || !vaccine_details || !manufacturer_no) {
+      return res.status(400).json({
+        error: 'vaccine_date, vet_id, vaccine_details, and manufacturer_no are required',
+      });
+    }
+    const { rows } = await query(
+      `UPDATE vaccine_table
+       SET vaccine_date = $1, vet_id = $2, vaccine_details = $3,
+           manufacturer_no = $4, is_office_visit = $5
+       WHERE vaccine_id = $6 AND deleted_at IS NULL
+       RETURNING vaccine_id, pet_id, vet_id, vaccine_date, vaccine_details,
+                 manufacturer_no, session_id, is_office_visit`,
+      [vaccine_date, Number(vet_id), vaccine_details, manufacturer_no,
+       is_office_visit ?? false, req.params.id],
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Record not found' });
+    syncRecord('vaccine_table', 'vaccine_id', rows[0].vaccine_id);
+    res.json(rows[0]);
+  } catch (err) { next(err); }
 });
 
 router.delete('/:id', async (req, res, next) => {
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    const { rows } = await client.query(
-      `DELETE FROM vaccine_table WHERE vaccine_id = $1 RETURNING approval_id`,
+    // Soft delete — preserves record for sync/audit; approval_id stays intact
+    const { rows } = await query(
+      `UPDATE vaccine_table
+       SET deleted_at = NOW()
+       WHERE vaccine_id = $1 AND deleted_at IS NULL
+       RETURNING vaccine_id`,
       [req.params.id],
     );
-    if (!rows[0]) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Record not found' });
-    }
-    if (rows[0].approval_id) {
-      await client.query(
-        `DELETE FROM approval_id_table WHERE approval_id = $1`,
-        [rows[0].approval_id],
-      );
-    }
-    await client.query('COMMIT');
+    if (!rows[0]) return res.status(404).json({ error: 'Record not found' });
+    syncRecord('vaccine_table', 'vaccine_id', Number(req.params.id));
     res.status(204).end();
-  } catch (err) {
-    await client.query('ROLLBACK');
-    next(err);
-  } finally {
-    client.release();
-  }
+  } catch (err) { next(err); }
 });
 
 router.post('/', async (req, res, next) => {
@@ -148,7 +142,10 @@ router.post('/', async (req, res, next) => {
     );
 
     await client.query('COMMIT');
-    res.status(201).json({ ...vaxRes.rows[0], approval_code });
+    const newVax = vaxRes.rows[0];
+    syncRecord('approval_id_table', 'approval_id', newVax.approval_id);
+    syncRecord('vaccine_table',     'vaccine_id',  newVax.vaccine_id);
+    res.status(201).json({ ...newVax, approval_code });
   } catch (err) {
     await client.query('ROLLBACK');
     next(err);

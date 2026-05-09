@@ -12,6 +12,7 @@ import vaccinationsRouter from './routes/vaccinations.js';
 import driveSessionsRouter from './routes/drive-sessions.js';
 import statsRouter     from './routes/stats.js';
 import analyticsRouter from './routes/analytics.js';
+import syncRouter      from './routes/sync.js';
 import authRouter      from './routes/auth.js';
 import { bootstrapSchema } from './local/db.js';
 
@@ -33,6 +34,7 @@ app.use('/api/vaccinations', vaccinationsRouter);
 app.use('/api/drive-sessions', driveSessionsRouter);
 app.use('/api/stats',     statsRouter);
 app.use('/api/analytics', analyticsRouter);
+app.use('/api/sync',      syncRouter);
 
 app.get('/', (_req, res) => {
   res.json({ name: 'digivet-server', status: 'ok' });

@@ -15,6 +15,7 @@ export function requireAuth(req, res, next) {
   }
 }
 
+// req.user.id is now a UUID string (was integer user_id)
 export function requireAdmin(req, res, next) {
   requireAuth(req, res, () => {
     if (req.user?.role !== 'ADMIN') {

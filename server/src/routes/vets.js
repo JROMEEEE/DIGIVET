@@ -1,5 +1,6 @@
 import express from 'express';
 import { query } from '../local/db.js';
+import { syncRecord } from '../lib/syncRecord.js';
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.post('/', async (req, res) => {
     'INSERT INTO vet_table (vet_name) VALUES ($1) RETURNING vet_id, vet_name',
     [vet_name],
   );
+  syncRecord('vet_table', 'vet_id', rows[0].vet_id);
   res.status(201).json(rows[0]);
 });
 

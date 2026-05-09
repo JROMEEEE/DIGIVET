@@ -11,6 +11,7 @@ const navItems = [
   { to: '/dashboard/records',     label: 'Records',        icon: 'RC' },
   { to: '/dashboard/analytics',   label: 'Analytics',      icon: 'AN' },
   { to: '/dashboard/vets',        label: 'Veterinarians',  icon: 'VT' },
+  { to: '/dashboard/sync',        label: 'Sync',           icon: 'SY' },
 ]
 
 const titles = {
@@ -19,6 +20,7 @@ const titles = {
   '/dashboard/records':       { title: 'Records',       crumb: 'Admin · Records' },
   '/dashboard/analytics':     { title: 'Analytics',     crumb: 'Admin · Analytics' },
   '/dashboard/vets':          { title: 'Veterinarians', crumb: 'Admin · Veterinarians' },
+  '/dashboard/sync':          { title: 'Sync',          crumb: 'Admin · Sync to Supabase' },
 }
 
 function initials(name) {
@@ -47,7 +49,7 @@ export default function DashboardLayout() {
 
   async function handleUpdate(form) {
     const { user: updated } = await api.auth.updateMe(form)
-    // Refresh stored user without touching the token
+    // Refresh stored user — id is now a UUID string
     const token = localStorage.getItem('digivet_token')
     login(updated, token)
   }

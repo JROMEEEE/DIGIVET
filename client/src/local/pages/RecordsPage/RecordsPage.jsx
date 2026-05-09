@@ -48,6 +48,8 @@ export default function RecordsPage() {
   const [expandedOwners, setExpandedOwners] = useState(new Set())
   const [expandedPets, setExpandedPets]     = useState(new Set())
   const [viewTarget, setViewTarget]         = useState(null)
+  const [showOwnersModal, setShowOwnersModal] = useState(false)
+  const [showPetsModal, setShowPetsModal]     = useState(false)
   const [editTarget, setEditTarget]         = useState(null)
   const [deleteTarget, setDeleteTarget]     = useState(null)
   const [flash, setFlash]               = useState(null)
@@ -150,9 +152,17 @@ export default function RecordsPage() {
           <h2 className="records-title">Records</h2>
           <p className="records-sub">All vaccination records. Filter by session, edit, or delete entries.</p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => navigate('/dashboard/encode')}>
-          + New record
-        </button>
+        <div className="records-header-actions">
+          <button type="button" className="btn btn-outline" onClick={() => setShowOwnersModal(true)}>
+            Manage Owners
+          </button>
+          <button type="button" className="btn btn-outline" onClick={() => setShowPetsModal(true)}>
+            Manage Pets
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => navigate('/dashboard/encode')}>
+            + New record
+          </button>
+        </div>
       </div>
 
       {error && <div className="encode-banner encode-banner--error">{error}</div>}
@@ -438,7 +448,290 @@ export default function RecordsPage() {
           </div>
         </div>
       )}
+      {showOwnersModal && (
+        <OwnersManageModal onClose={() => setShowOwnersModal(false)} />
+      )}
+      {showPetsModal && (
+        <PetsManageModal onClose={() => setShowPetsModal(false)} />
+      )}
     </main>
+  )
+}
+
+/* ── Owners management modal ─────────────────────────────────── */
+function OwnersManageModal({ onClose }) {
+  const [barangays, setBarangays] = useState([])
+  const [owners, setOwners]       = useState([])
+  const [search, setSearch]       = useState('')
+  const [loading, setLoading]     = useState(true)
+  const [editTarget, setEditTarget]     = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [flash, setFlash] = useState(null)
+  const [error, setError] = useState(null)
+
+  function ok(m)  { setFlash(m); setError(null); setTimeout(() => setFlash(null), 3000) }
+  function err(m) { setError(m); setFlash(null) }
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape' && !editTarget && !deleteTarget) onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose, editTarget, deleteTarget])
+
+  useEffect(() => {
+    Promise.all([api.barangays.list(), api.owners.search('', 200)])
+      .then(([bs, os]) => { setBarangays(bs); setOwners(os); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const q = search.trim().toLowerCase()
+  const filtered = q ? owners.filter(o => o.owner_name?.toLowerCase().includes(q) || o.contact_number?.includes(q)) : owners
+
+  async function save(form, id) {
+    try {
+      if (id) {
+        const u = await api.owners.update(id, form)
+        setOwners(prev => prev.map(o => o.owner_id === id
+          ? { ...o, ...u, barangay_name: barangays.find(b => b.barangay_id === Number(form.barangay_id))?.barangay_name }
+          : o))
+        ok('Owner updated.')
+      } else {
+        const c = await api.owners.create(form)
+        setOwners(prev => [{ ...c, barangay_name: barangays.find(b => b.barangay_id === c.barangay_id)?.barangay_name }, ...prev])
+        ok('Owner added.')
+      }
+      setEditTarget(null)
+    } catch (e) { err(e.detail ?? e.message) }
+  }
+
+  async function remove(owner) {
+    try {
+      await api.owners.remove(owner.owner_id)
+      setOwners(prev => prev.filter(o => o.owner_id !== owner.owner_id))
+      setDeleteTarget(null)
+      ok('Owner and all related pets/records deleted.')
+    } catch (e) { err(e.detail ?? e.message) }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal modal--lg" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3 className="modal-title">Manage Pet Owners</h3>
+          <button type="button" className="modal-close-btn" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-search-bar">
+          <input type="search" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search by name or contact…" className="encode-input" autoFocus />
+          <span className="modal-result-count">{filtered.length} owner{filtered.length !== 1 ? 's' : ''}</span>
+          <button type="button" className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.82rem' }}
+            onClick={() => setEditTarget('new')}>+ Add</button>
+        </div>
+        <div className="modal-scroll">
+          {flash && <div className="encode-banner encode-banner--ok" style={{ margin: '0 0 8px' }}>{flash}</div>}
+          {error && <div className="encode-banner encode-banner--error" style={{ margin: '0 0 8px' }}>{error}</div>}
+          {loading ? <p className="modal-state">Loading…</p> : filtered.length === 0 ? <p className="modal-state">No owners found.</p> : (
+            <div className="manage-table">
+              <div className="manage-col-head"><span>Name</span><span>Contact</span><span>Barangay</span><span></span></div>
+              {filtered.map(o => (
+                <div key={o.owner_id} className="manage-row">
+                  <span className="manage-cell-main">{o.owner_name}</span>
+                  <span className="manage-cell-muted">{o.contact_number}</span>
+                  <span className="manage-cell-muted">{o.barangay_name ?? '—'}</span>
+                  <div className="manage-actions">
+                    <button type="button" className="btn btn-outline manage-btn" onClick={() => setEditTarget(o)}>Edit</button>
+                    <button type="button" className="manage-del-btn" onClick={() => setDeleteTarget(o)}>Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      {editTarget && (
+        <OwnerFormModal owner={editTarget === 'new' ? null : editTarget} barangays={barangays}
+          onSave={save} onCancel={() => setEditTarget(null)} />
+      )}
+      {deleteTarget && (
+        <div className="modal-backdrop" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title">Delete Owner</h3>
+            <p className="modal-body">
+              Delete <strong>{deleteTarget.owner_name}</strong>?
+              This will also delete all their pets and vaccination records. Cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-outline" onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button type="button" className="btn btn-danger" onClick={() => remove(deleteTarget)}>Delete all</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function OwnerFormModal({ owner, barangays, onSave, onCancel }) {
+  const [form, setForm] = useState({ owner_name: owner?.owner_name ?? '', contact_number: owner?.contact_number ?? '', barangay_id: String(owner?.barangay_id ?? '') })
+  const u = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div className="modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+        <h3 className="modal-title">{owner ? 'Edit Owner' : 'Add Owner'}</h3>
+        <form className="encode-form" style={{ marginTop: 12 }} onSubmit={e => { e.preventDefault(); onSave(form, owner?.owner_id) }}>
+          <label>Full name<input required value={form.owner_name} onChange={u('owner_name')} className="encode-input" autoFocus /></label>
+          <label>Contact<input required value={form.contact_number} onChange={u('contact_number')} className="encode-input" /></label>
+          <label>Barangay
+            <select required value={form.barangay_id} onChange={u('barangay_id')} className="encode-input">
+              <option value="">— select —</option>
+              {barangays.map(b => <option key={b.barangay_id} value={b.barangay_id}>{b.barangay_name}</option>)}
+            </select>
+          </label>
+          <div className="encode-form-actions">
+            <button type="button" className="btn btn-outline" onClick={onCancel}>Cancel</button>
+            <button type="submit" className="btn btn-primary">{owner ? 'Save' : 'Add owner'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/* ── Pets management modal ───────────────────────────────────── */
+function PetsManageModal({ onClose }) {
+  const [owners, setOwners] = useState([])
+  const [pets, setPets]     = useState([])
+  const [search, setSearch] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [editTarget, setEditTarget]     = useState(null)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [flash, setFlash] = useState(null)
+  const [error, setError] = useState(null)
+
+  function ok(m)  { setFlash(m); setError(null); setTimeout(() => setFlash(null), 3000) }
+  function err(m) { setError(m); setFlash(null) }
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape' && !editTarget && !deleteTarget) onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose, editTarget, deleteTarget])
+
+  useEffect(() => {
+    Promise.all([api.pets.list(), api.owners.search('', 200)])
+      .then(([ps, os]) => { setPets(ps); setOwners(os); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const q = search.trim().toLowerCase()
+  const filtered = q ? pets.filter(p => p.pet_name?.toLowerCase().includes(q) || p.owner_name?.toLowerCase().includes(q)) : pets
+
+  async function save(form, id) {
+    try {
+      if (id) {
+        const u = await api.pets.update(id, form)
+        setPets(prev => prev.map(p => p.pet_id === id
+          ? { ...p, ...u, owner_name: owners.find(o => o.owner_id === Number(form.owner_id))?.owner_name }
+          : p))
+        ok('Pet updated.')
+      } else {
+        const c = await api.pets.create(form)
+        setPets(prev => [{ ...c, owner_name: owners.find(o => o.owner_id === c.owner_id)?.owner_name }, ...prev])
+        ok('Pet added.')
+      }
+      setEditTarget(null)
+    } catch (e) { err(e.detail ?? e.message) }
+  }
+
+  async function remove(pet) {
+    try {
+      await api.pets.remove(pet.pet_id)
+      setPets(prev => prev.filter(p => p.pet_id !== pet.pet_id))
+      setDeleteTarget(null)
+      ok('Pet deleted.')
+    } catch (e) { err(e.detail ?? e.message) }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal modal--lg" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <h3 className="modal-title">Manage Pets</h3>
+          <button type="button" className="modal-close-btn" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-search-bar">
+          <input type="search" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search by pet name or owner…" className="encode-input" autoFocus />
+          <span className="modal-result-count">{filtered.length} pet{filtered.length !== 1 ? 's' : ''}</span>
+          <button type="button" className="btn btn-primary" style={{ padding: '6px 14px', fontSize: '0.82rem' }}
+            onClick={() => setEditTarget('new')}>+ Add</button>
+        </div>
+        <div className="modal-scroll">
+          {flash && <div className="encode-banner encode-banner--ok" style={{ margin: '0 0 8px' }}>{flash}</div>}
+          {error && <div className="encode-banner encode-banner--error" style={{ margin: '0 0 8px' }}>{error}</div>}
+          {loading ? <p className="modal-state">Loading…</p> : filtered.length === 0 ? <p className="modal-state">No pets found.</p> : (
+            <div className="manage-table">
+              <div className="manage-col-head manage-col-head--pets"><span>Pet</span><span>Type · Age</span><span>Owner</span><span></span></div>
+              {filtered.map(p => (
+                <div key={p.pet_id} className="manage-row manage-row--pets">
+                  <span className="manage-cell-main">{p.pet_name}</span>
+                  <span className="manage-cell-muted">{p.pet_type} · {p.pet_age}</span>
+                  <span className="manage-cell-muted">{p.owner_name ?? '—'}</span>
+                  <div className="manage-actions">
+                    <button type="button" className="btn btn-outline manage-btn" onClick={() => setEditTarget(p)}>Edit</button>
+                    <button type="button" className="manage-del-btn" onClick={() => setDeleteTarget(p)}>Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      {editTarget && (
+        <PetFormModal pet={editTarget === 'new' ? null : editTarget} owners={owners}
+          onSave={save} onCancel={() => setEditTarget(null)} />
+      )}
+      {deleteTarget && (
+        <div className="modal-backdrop" onClick={() => setDeleteTarget(null)}>
+          <div className="modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+            <h3 className="modal-title">Delete Pet</h3>
+            <p className="modal-body">Delete <strong>{deleteTarget.pet_name}</strong>? Cannot be undone.</p>
+            <div className="modal-actions">
+              <button type="button" className="btn btn-outline" onClick={() => setDeleteTarget(null)}>Cancel</button>
+              <button type="button" className="btn btn-danger" onClick={() => remove(deleteTarget)}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PetFormModal({ pet, owners, onSave, onCancel }) {
+  const [form, setForm] = useState({ owner_id: String(pet?.owner_id ?? ''), pet_name: pet?.pet_name ?? '', pet_type: pet?.pet_type ?? '', pet_age: pet?.pet_age ?? '', pet_color: pet?.pet_color ?? '' })
+  const u = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div className="modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+        <h3 className="modal-title">{pet ? 'Edit Pet' : 'Add Pet'}</h3>
+        <form className="encode-form" style={{ marginTop: 12 }} onSubmit={e => { e.preventDefault(); onSave(form, pet?.pet_id) }}>
+          <label>Owner
+            <select required value={form.owner_id} onChange={u('owner_id')} className="encode-input">
+              <option value="">— select —</option>
+              {owners.map(o => <option key={o.owner_id} value={o.owner_id}>{o.owner_name}</option>)}
+            </select>
+          </label>
+          <label>Name<input required value={form.pet_name} onChange={u('pet_name')} className="encode-input" autoFocus /></label>
+          <label>Type<input required placeholder="Dog / Cat / …" value={form.pet_type} onChange={u('pet_type')} className="encode-input" /></label>
+          <label>Age<input required placeholder="e.g. 3 yrs" value={form.pet_age} onChange={u('pet_age')} className="encode-input" /></label>
+          <label>Color<input required value={form.pet_color} onChange={u('pet_color')} className="encode-input" /></label>
+          <div className="encode-form-actions">
+            <button type="button" className="btn btn-outline" onClick={onCancel}>Cancel</button>
+            <button type="submit" className="btn btn-primary">{pet ? 'Save' : 'Add pet'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
   )
 }
 

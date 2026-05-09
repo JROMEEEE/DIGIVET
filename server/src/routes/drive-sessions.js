@@ -1,5 +1,6 @@
 import express from 'express';
 import { query } from '../local/db.js';
+import { syncRecord } from '../lib/syncRecord.js';
 
 const router = express.Router();
 
@@ -53,6 +54,7 @@ router.post('/', async (req, res) => {
      WHERE s.session_id = $1`,
     [rows[0].session_id],
   );
+  syncRecord('drive_session_table', 'session_id', rows[0].session_id);
   res.status(201).json(detail[0]);
 });
 

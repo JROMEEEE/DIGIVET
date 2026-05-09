@@ -3,11 +3,23 @@ import { Link } from 'react-router-dom'
 import { api } from '../../api'
 import './DashboardOverview.css'
 
+function timeAgo(d) {
+  if (!d) return null
+  const diff = Date.now() - new Date(d).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1)  return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24)  return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
 const MODULES = [
-  { to: '/dashboard/encode',     icon: 'EN', name: 'Encode',        desc: 'Record a new vaccination' },
-  { to: '/dashboard/records',    icon: 'RC', name: 'Records',       desc: 'View, edit, delete entries' },
-  { to: '/dashboard/analytics',  icon: 'AN', name: 'Analytics',     desc: 'Coverage insights & reports' },
-  { to: '/dashboard/vets',       icon: 'VT', name: 'Veterinarians', desc: 'Manage vets & approval IDs' },
+  { to: '/dashboard/encode',     icon: 'EN', name: 'Encode',        desc: 'Record vaccinations' },
+  { to: '/dashboard/records',    icon: 'RC', name: 'Records',       desc: 'View & manage entries' },
+  { to: '/dashboard/analytics',  icon: 'AN', name: 'Analytics',     desc: 'Coverage & insights' },
+  { to: '/dashboard/vets',       icon: 'VT', name: 'Veterinarians', desc: 'Vets & approval IDs' },
+  { to: '/dashboard/sync',       icon: 'SY', name: 'Sync',          desc: 'Push to Supabase' },
 ]
 
 const STAT_CARDS = (s) => [
@@ -18,12 +30,13 @@ const STAT_CARDS = (s) => [
 ]
 
 export default function DashboardOverview() {
-  const [stats, setStats]     = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [stats, setStats]         = useState(null)
+  const [syncStatus, setSyncStatus] = useState(null)
+  const [loading, setLoading]     = useState(true)
 
   useEffect(() => {
-    api.stats.get()
-      .then((d) => { setStats(d); setLoading(false) })
+    Promise.all([api.stats.get(), api.sync.status()])
+      .then(([s, sy]) => { setStats(s); setSyncStatus(sy); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
 
@@ -156,20 +169,24 @@ export default function DashboardOverview() {
             )}
           </section>
 
-          {/* Autosync placeholder */}
+          {/* Sync status */}
           <section className="overview-panel overview-panel--autosync">
             <div className="overview-panel-head">
               <span className="overview-panel-icon overview-panel-icon--sync" aria-hidden="true">⟳</span>
-              <h3 className="overview-panel-title">Sync status</h3>
-              <span className="overview-sync-badge">Soon</span>
+              <h3 className="overview-panel-title">Supabase Sync</h3>
+              {syncStatus?.connected && (
+                <span className="overview-sync-badge overview-sync-badge--ok">Connected</span>
+              )}
             </div>
             <p className="overview-sync-status">
-              <span className="overview-sync-dot" />
-              Autosync not configured
+              <span className={`overview-sync-dot${syncStatus?.connected ? ' overview-sync-dot--ok' : ''}`} />
+              {syncStatus?.last_sync
+                ? `Last synced ${timeAgo(syncStatus.last_sync.last_sync_at)} · ${syncStatus.last_sync.records_synced} records`
+                : 'No sync performed yet'}
             </p>
-            <p className="overview-hint">
-              Online database sync and export controls will appear here once autosync is set up.
-            </p>
+            <Link to="/dashboard/sync" className="btn btn-primary overview-sync-go-btn">
+              Go to Sync Dashboard →
+            </Link>
           </section>
 
         </div>

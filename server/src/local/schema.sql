@@ -76,13 +76,80 @@ BEGIN
   END LOOP;
 END $$;
 
--- Add auth columns to user_table (idempotent).
--- Note: the original `password` column stores the bcrypt hash — no separate password_hash needed.
-ALTER TABLE user_table ADD COLUMN IF NOT EXISTS email        VARCHAR(255);
-ALTER TABLE user_table ADD COLUMN IF NOT EXISTS role         VARCHAR(10)  NOT NULL DEFAULT 'USER';
-ALTER TABLE user_table ADD COLUMN IF NOT EXISTS display_name VARCHAR(255);
-ALTER TABLE user_table ADD COLUMN IF NOT EXISTS created_at   TIMESTAMPTZ  DEFAULT NOW();
+-- user_profile: app-level user data, keyed by Supabase auth.users UUID.
+-- When Supabase Auth is live, id comes from auth.users and local_* columns are dropped.
+-- For local dev, id is auto-generated and local_email/local_password_hash act as temporary auth.
+CREATE TABLE IF NOT EXISTS user_profile (
+  id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  display_name        VARCHAR(255) NOT NULL,
+  role                VARCHAR(10)  NOT NULL DEFAULT 'ADMIN',
+  -- ↓ TEMPORARY local-dev-only columns — remove after Supabase Auth migration ↓
+  local_email         VARCHAR(255) UNIQUE,
+  local_password_hash TEXT,
+  -- ↑ ─────────────────────────────────────────────────────────────────────── ↑
+  created_at          TIMESTAMPTZ  DEFAULT NOW()
+);
 
 -- Add new columns to vaccine_table (idempotent).
 ALTER TABLE vaccine_table ADD COLUMN IF NOT EXISTS session_id      INT;
 ALTER TABLE vaccine_table ADD COLUMN IF NOT EXISTS is_office_visit BOOL NOT NULL DEFAULT FALSE;
+
+-- ── updated_at: every table ───────────────────────────────────────
+ALTER TABLE barangay_table      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE owner_table         ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE pet_table           ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE vet_table           ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE vaccine_table       ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE approval_id_table   ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE drive_session_table ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE user_profile        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- ── deleted_at: owner-linked tables (soft delete for sync safety) ─
+ALTER TABLE owner_table   ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE pet_table     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE vaccine_table ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+
+-- ── Sync log: single-row table tracking last push to Supabase ────
+CREATE TABLE IF NOT EXISTS sync_log (
+  id               INT         PRIMARY KEY DEFAULT 1,
+  last_sync_at     TIMESTAMPTZ,          -- only set on FULL success (used as cursor)
+  last_attempt_at  TIMESTAMPTZ,          -- set on every attempt (success or fail)
+  synced_by        TEXT,
+  records_synced   INT         DEFAULT 0,
+  status           TEXT        DEFAULT 'never'  -- never | ok | partial | error
+);
+ALTER TABLE sync_log ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ;
+
+-- ── Auto-update trigger function (shared by all tables) ───────────
+CREATE OR REPLACE FUNCTION set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$;
+
+-- ── Attach trigger to every table that has updated_at ─────────────
+DO $$
+DECLARE
+  tbl TEXT;
+BEGIN
+  FOREACH tbl IN ARRAY ARRAY[
+    'barangay_table', 'owner_table', 'pet_table', 'vet_table',
+    'vaccine_table', 'approval_id_table', 'drive_session_table', 'user_profile'
+  ]
+  LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.tables
+      WHERE table_schema = 'public' AND table_name = tbl
+    ) THEN CONTINUE; END IF;
+
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_updated_at ON %I', tbl);
+    EXECUTE format(
+      'CREATE TRIGGER trg_updated_at
+       BEFORE UPDATE ON %I
+       FOR EACH ROW EXECUTE FUNCTION set_updated_at()',
+      tbl
+    );
+  END LOOP;
+END $$;

@@ -7,6 +7,7 @@ import DashboardLayout    from './local/pages/DashboardLayout/DashboardLayout'
 import DashboardOverview  from './local/pages/DashboardOverview/DashboardOverview'
 import EncodePage         from './local/pages/EncodePage/EncodePage'
 import RecordsPage        from './local/pages/RecordsPage/RecordsPage'
+import SyncPage           from './local/pages/SyncPage/SyncPage'
 import AnalyticsPage      from './local/pages/AnalyticsPage/AnalyticsPage'
 import VeterinariansPage  from './local/pages/VeterinariansPage/VeterinariansPage'
 import './shared/styles/components.css'
@@ -37,6 +38,7 @@ function AppRoutes() {
         <Route path="encode"  element={<EncodePage />} />
         <Route path="records"    element={<RecordsPage />} />
         <Route path="analytics"  element={<AnalyticsPage />} />
+  <Route path="sync"       element={<SyncPage />} />
         <Route path="vets"       element={<VeterinariansPage />} />
       </Route>
 
