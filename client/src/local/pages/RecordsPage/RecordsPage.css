@@ -194,7 +194,157 @@
   text-align: center;
 }
 
-/* ── Record list ─────────────────────────────────────────── */
+/* ── Owner → Pet → Record accordion ─────────────────────── */
+.owner-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.owner-group {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.owner-group-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: #fff;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background 0.12s;
+}
+.owner-group-head:hover  { background: var(--bg-soft); }
+.owner-group-head.is-open { background: var(--maroon-soft); }
+
+.owner-group-avatar {
+  width: 36px; height: 36px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--maroon);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.owner-group-name  { font-weight: 600; font-size: 0.97rem; }
+.owner-group-brgy  {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--maroon);
+  background: var(--maroon-soft);
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.owner-group-meta  { font-size: 0.8rem; color: var(--text-muted); white-space: nowrap; flex: 1; }
+.owner-group-chevron { font-size: 0.65rem; color: var(--text-muted); flex-shrink: 0; }
+
+.owner-group-body {
+  border-top: 1px solid var(--border);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-soft);
+}
+
+/* Pet subgroup */
+.pet-group {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.pet-group-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #fff;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background 0.12s;
+}
+.pet-group-head:hover  { background: var(--bg-soft); }
+.pet-group-head.is-open { background: rgba(122,31,43,0.04); }
+
+.pet-group-icon {
+  width: 28px; height: 28px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--maroon-soft);
+  color: var(--maroon);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
+.pet-group-name  { font-weight: 600; font-size: 0.9rem; }
+.pet-group-type  { font-size: 0.8rem; color: var(--text-muted); flex: 1; }
+.pet-group-count { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+.pet-group-chevron { font-size: 0.6rem; color: var(--text-muted); flex-shrink: 0; }
+
+/* Individual record rows */
+.pet-records-list {
+  list-style: none;
+  margin: 0; padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.pet-record-row {
+  display: grid;
+  grid-template-columns: 88px 56px 1fr 110px 148px 116px;
+  align-items: center;
+  gap: 0 10px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.1s;
+}
+.pet-record-row:last-child { border-bottom: none; }
+.pet-record-row:hover { background: var(--bg-soft); }
+
+.prl-date    { font-weight: 500; color: var(--maroon); font-size: 0.82rem; }
+.prl-vaccine { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.prl-vet     { font-size: 0.8rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prl-code    { font-family: ui-monospace, 'Cascadia Code', monospace; font-size: 0.75rem; color: var(--maroon); letter-spacing: 0.04em; white-space: nowrap; }
+
+.prl-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  justify-content: flex-end;
+}
+
+.prl-actions .records-action-btn,
+.prl-actions .records-del-btn {
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  min-width: 44px;
+  text-align: center;
+  justify-content: center;
+}
+
+/* ── Record list (kept for reference) ───────────────────── */
 .records-list {
   list-style: none;
   margin: 0;

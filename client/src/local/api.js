@@ -45,6 +45,18 @@ export const api = {
   analytics: {
     ping:             () => request('/analytics/ping'),
     testDb:           () => request('/analytics/test-db'),
+    clustering:            () => request('/analytics/clustering'),
+    barangayRiskDetail:      (name) => request(`/analytics/barangay-risk-detail?name=${encodeURIComponent(name)}`),
+    allBarangaysClassified:  ()     => request('/analytics/all-barangays-classified'),
+    petTypeBreakdown: () => request('/analytics/pet-type-breakdown'),
+    petTypeDetail: (type) => request(`/analytics/pet-type-detail?type=${encodeURIComponent(type)}`),
+    monthlyDetail: (month) => request(`/analytics/monthly-detail?month=${encodeURIComponent(month)}`),
+    monthlyTrends: ({ months } = {}) => {
+      const qs = new URLSearchParams()
+      if (months) qs.set('months', String(months))
+      const s = qs.toString()
+      return request(`/analytics/monthly-trends${s ? '?' + s : ''}`)
+    },
     barangayCoverage: ({ q, limit } = {}) => {
       const qs = new URLSearchParams()
       if (q)     qs.set('q',     q)

@@ -13,14 +13,16 @@ const BASE_SELECT = `
   SELECT v.vaccine_id, v.vaccine_date, v.vaccine_details, v.manufacturer_no,
          v.pet_id, p.pet_name, p.pet_type, p.pet_age,
          p.owner_id, o.owner_name,
+         b.barangay_name,
          v.vet_id, vt.vet_name,
          v.approval_id, a.approval_code,
          v.session_id, v.is_office_visit
   FROM vaccine_table v
-  LEFT JOIN pet_table p           ON p.pet_id   = v.pet_id
-  LEFT JOIN owner_table o         ON o.owner_id  = p.owner_id
-  LEFT JOIN vet_table vt          ON vt.vet_id   = v.vet_id
-  LEFT JOIN approval_id_table a   ON a.approval_id = v.approval_id
+  LEFT JOIN pet_table p           ON p.pet_id        = v.pet_id
+  LEFT JOIN owner_table o         ON o.owner_id       = p.owner_id
+  LEFT JOIN barangay_table b      ON b.barangay_id    = o.barangay_id
+  LEFT JOIN vet_table vt          ON vt.vet_id        = v.vet_id
+  LEFT JOIN approval_id_table a   ON a.approval_id    = v.approval_id
 `;
 
 router.get('/', async (req, res) => {

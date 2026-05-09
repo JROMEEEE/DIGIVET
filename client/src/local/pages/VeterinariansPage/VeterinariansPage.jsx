@@ -169,17 +169,22 @@ function ApprovalsModal({ vet, onClose }) {
             </p>
           ) : (
             <>
-              <div className="modal-col-head">
+              <div className="modal-col-head modal-col-head--4">
                 <span>Approval Code</span>
                 <span>Pet</span>
                 <span>Owner</span>
+                <span>Barangay</span>
               </div>
               <ul className="vets-approvals-list">
                 {rows.map((a, i) => (
-                  <li key={a.approval_id ?? i} className="vets-approval-row">
+                  <li key={a.approval_id ?? i} className="vets-approval-row vets-approval-row--4">
                     <span className="vets-approval-code">{a.approval_code}</span>
                     <span className="vets-approval-pet">{a.pet_name ?? '—'}</span>
                     <span className="vets-approval-owner">{a.owner_name ?? '—'}</span>
+                    <span className="vets-approval-brgy">
+                      {a.barangay_name ?? '—'}
+                      {a.is_office_visit && <span className="vets-approval-office-tag"> · Office</span>}
+                    </span>
                   </li>
                 ))}
               </ul>

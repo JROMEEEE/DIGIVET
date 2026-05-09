@@ -141,6 +141,8 @@
   font-size: 0.88rem;
 }
 
+.vets-approval-row--4 { grid-template-columns: minmax(160px, 1.2fr) 1fr 1fr 1fr; }
+
 .vets-approval-code {
   font-family: ui-monospace, 'Cascadia Code', monospace;
   font-size: 0.85rem;
@@ -161,6 +163,24 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.vets-approval-brgy {
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.vets-approval-office-tag {
+  font-size: 0.75rem;
+  color: #2563eb;
+  font-weight: 500;
+}
+
+.modal-col-head--4 {
+  grid-template-columns: minmax(160px, 1.2fr) 1fr 1fr 1fr;
 }
 
 @media (max-width: 600px) {

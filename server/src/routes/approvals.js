@@ -28,12 +28,18 @@ router.get('/', async (req, res) => {
     `SELECT a.approval_id, a.approval_code,
             a.vet_id, vt.vet_name,
             p.pet_id, p.pet_name,
-            o.owner_id, o.owner_name
+            o.owner_id, o.owner_name,
+            -- Session barangay (where vaccination happened); fall back to owner's home barangay
+            COALESCE(bs.barangay_name, bo.barangay_name) AS barangay_name,
+            v.is_office_visit
      FROM approval_id_table a
-     LEFT JOIN vet_table vt    ON vt.vet_id = a.vet_id
-     LEFT JOIN vaccine_table v ON v.approval_id = a.approval_id
-     LEFT JOIN pet_table p     ON p.pet_id = v.pet_id
-     LEFT JOIN owner_table o   ON o.owner_id = p.owner_id
+     LEFT JOIN vet_table vt           ON vt.vet_id       = a.vet_id
+     LEFT JOIN vaccine_table v        ON v.approval_id   = a.approval_id
+     LEFT JOIN pet_table p            ON p.pet_id        = v.pet_id
+     LEFT JOIN owner_table o          ON o.owner_id      = p.owner_id
+     LEFT JOIN drive_session_table s  ON s.session_id    = v.session_id
+     LEFT JOIN barangay_table bs      ON bs.barangay_id  = s.barangay_id
+     LEFT JOIN barangay_table bo      ON bo.barangay_id  = o.barangay_id
      ${where}
      ORDER BY a.approval_id DESC
      LIMIT $${params.length}`,

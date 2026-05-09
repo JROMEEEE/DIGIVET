@@ -886,9 +886,26 @@ function VaccinationForm({ vets, isDrive, showVetForm, onToggleVetForm, onCreate
         <label>Manufacturer / lot #
           <input required value={form.manufacturer_no} onChange={update('manufacturer_no')} className="encode-input" />
         </label>
-        <label className="encode-form-wide">Details
-          <textarea required rows={3} placeholder="Vaccine name, dosage, route, notes…"
-            value={form.vaccine_details} onChange={update('vaccine_details')} className="encode-input" />
+        <label>Vaccine
+          <input
+            required
+            list="vaccine-list"
+            placeholder="e.g. Rabisin, Dog 5-in-1"
+            value={form.vaccine_details}
+            onChange={update('vaccine_details')}
+            className="encode-input"
+          />
+          <datalist id="vaccine-list">
+            <option value="Rabisin" />
+            <option value="Dog 5-in-1 (DHPP)" />
+            <option value="Dog 6-in-1 (DHPP + Lepto)" />
+            <option value="Kennel Cough (Bordetella)" />
+            <option value="Cat 3-in-1 (FVRCP)" />
+            <option value="Leptospirosis" />
+            <option value="Parvovirus" />
+            <option value="Distemper" />
+            <option value="Anti-Rabies Booster" />
+          </datalist>
         </label>
 
         {isDrive && (
@@ -934,7 +951,7 @@ function VaccinationForm({ vets, isDrive, showVetForm, onToggleVetForm, onCreate
                 <span>{form.manufacturer_no}</span>
               </div>
               <div className="modal-summary-row">
-                <span className="modal-summary-label">Details</span>
+                <span className="modal-summary-label">Vaccine</span>
                 <span>{form.vaccine_details}</span>
               </div>
               {isDrive && (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../api'
 import './RecordsPage.css'
@@ -7,6 +7,32 @@ function fmtDate(d) {
   if (!d) return '—'
   const s = String(d)
   return new Date(s.includes('T') ? s : s + 'T00:00:00').toLocaleDateString()
+}
+
+function groupByOwnerPet(records) {
+  const owners = new Map()
+  for (const r of records) {
+    const oid = r.owner_id ?? r.owner_name ?? '?'
+    if (!owners.has(oid)) {
+      owners.set(oid, {
+        owner_id:     oid,
+        owner_name:   r.owner_name   ?? '—',
+        barangay_name: r.barangay_name ?? null,
+        pets: new Map(),
+      })
+    }
+    const owner = owners.get(oid)
+    const pid = r.pet_id ?? r.pet_name ?? '?'
+    if (!owner.pets.has(pid)) {
+      owner.pets.set(pid, {
+        pet_id: pid, pet_name: r.pet_name ?? '—',
+        pet_type: r.pet_type, pet_age: r.pet_age,
+        records: [],
+      })
+    }
+    owner.pets.get(pid).records.push(r)
+  }
+  return [...owners.values()].map((o) => ({ ...o, pets: [...o.pets.values()] }))
 }
 
 export default function RecordsPage() {
@@ -19,9 +45,11 @@ export default function RecordsPage() {
   const [petSearch, setPetSearch]           = useState('')
   const [records, setRecords]           = useState([])
   const [loading, setLoading]           = useState(true)
-  const [viewTarget, setViewTarget]     = useState(null)
-  const [editTarget, setEditTarget]     = useState(null)
-  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [expandedOwners, setExpandedOwners] = useState(new Set())
+  const [expandedPets, setExpandedPets]     = useState(new Set())
+  const [viewTarget, setViewTarget]         = useState(null)
+  const [editTarget, setEditTarget]         = useState(null)
+  const [deleteTarget, setDeleteTarget]     = useState(null)
   const [flash, setFlash]               = useState(null)
   const [error, setError]               = useState(null)
 
@@ -97,6 +125,24 @@ export default function RecordsPage() {
       )
     : records
 
+  const grouped    = useMemo(() => groupByOwnerPet(displayRecords), [displayRecords])
+  const totalPets  = grouped.reduce((s, o) => s + o.pets.length, 0)
+
+  function toggleOwner(id) {
+    setExpandedOwners((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+  function togglePet(id) {
+    setExpandedPets((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
   return (
     <main className="records-page">
       <div className="records-header">
@@ -116,27 +162,12 @@ export default function RecordsPage() {
         <div className="records-count">
           {loading ? (
             <span className="records-count-num">…</span>
-          ) : q ? (
-            <>
-              <span className="records-count-num">{displayRecords.length}</span>
-              <span className="records-count-label">of {records.length}</span>
-              <span className="records-count-label">
-                {isPetOfficeFilter
-                  ? '— Pet Office'
-                  : selectedSession
-                  ? `in ${selectedSession.barangay_name} · ${fmtDate(selectedSession.session_date)}`
-                  : 'total records'}
-              </span>
-            </>
           ) : (
             <>
-              <span className="records-count-num">{records.length}</span>
+              <span className="records-count-num">{grouped.length}</span>
               <span className="records-count-label">
-                {isPetOfficeFilter
-                  ? 'records — Pet Office'
-                  : selectedSession
-                  ? `records in ${selectedSession.barangay_name} · ${fmtDate(selectedSession.session_date)}`
-                  : 'total records'}
+                owner{grouped.length !== 1 ? 's' : ''} · {totalPets} pet{totalPets !== 1 ? 's' : ''} · {displayRecords.length} record{displayRecords.length !== 1 ? 's' : ''}
+                {q ? ` matching "${petSearch}"` : isPetOfficeFilter ? ' — Pet Office' : selectedSession ? ` in ${selectedSession.barangay_name}` : ''}
               </span>
             </>
           )}
@@ -191,62 +222,93 @@ export default function RecordsPage() {
         <p className="records-state">
           {records.length === 0
             ? (sessionFilter ? 'No records for this session.' : 'No vaccination records yet.')
-            : `No pets match "${petSearch}".`}
+            : `No records match "${petSearch}".`}
         </p>
       ) : (
-        <ul className="records-list">
-          {displayRecords.map((r) => (
-            <li
-              key={r.vaccine_id}
-              className="records-card records-card--clickable"
-              onClick={() => setViewTarget(r)}
-            >
-              <div className="records-card-date">
-                <span className="records-date-main">{fmtDate(r.vaccine_date)}</span>
-                <span className={`records-tag records-tag--${r.is_office_visit ? 'office' : 'drive'}`}>
-                  {r.is_office_visit ? 'Pet Office' : 'Drive'}
-                </span>
-              </div>
-
-              <div className="records-card-body">
-                <div className="records-card-top">
-                  <span className="records-card-pet">
-                    {r.pet_name}
-                    {r.pet_type && (
-                      <span className="records-card-pettype">
-                        {' '}· {r.pet_type}{r.pet_age ? ` · ${r.pet_age}` : ''}
-                      </span>
-                    )}
+        <div className="owner-groups">
+          {grouped.map((owner) => {
+            const ownerOpen = expandedOwners.has(owner.owner_id)
+            const ownerRecordCount = owner.pets.reduce((s, p) => s + p.records.length, 0)
+            return (
+              <div key={owner.owner_id} className="owner-group">
+                <button
+                  type="button"
+                  className={`owner-group-head${ownerOpen ? ' is-open' : ''}`}
+                  onClick={() => toggleOwner(owner.owner_id)}
+                >
+                  <span className="owner-group-avatar">
+                    {(owner.owner_name ?? '?').charAt(0).toUpperCase()}
                   </span>
-                  <span className="records-card-owner">{r.owner_name ?? '—'}</span>
-                </div>
-                <p className="records-card-detail">{r.vaccine_details}</p>
-                <div className="records-card-meta">
-                  <span>Lot {r.manufacturer_no}</span>
-                  <span>{r.vet_name ?? '—'}</span>
-                  <span className="records-card-code">{r.approval_code ?? '—'}</span>
-                </div>
-              </div>
+                  <span className="owner-group-name">{owner.owner_name}</span>
+                  {owner.barangay_name && (
+                    <span className="owner-group-brgy">Brgy. {owner.barangay_name}</span>
+                  )}
+                  <span className="owner-group-meta">
+                    {owner.pets.length} pet{owner.pets.length !== 1 ? 's' : ''} · {ownerRecordCount} record{ownerRecordCount !== 1 ? 's' : ''}
+                  </span>
+                  <span className="owner-group-chevron" aria-hidden="true">
+                    {ownerOpen ? '▲' : '▼'}
+                  </span>
+                </button>
 
-              <div className="records-card-actions" onClick={(e) => e.stopPropagation()}>
-                <button
-                  type="button"
-                  className="btn btn-outline records-action-btn"
-                  onClick={() => setEditTarget(r)}
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  className="records-del-btn"
-                  onClick={() => setDeleteTarget(r)}
-                >
-                  Delete
-                </button>
+                {ownerOpen && (
+                  <div className="owner-group-body">
+                    {owner.pets.map((pet) => {
+                      const petOpen = expandedPets.has(pet.pet_id)
+                      return (
+                        <div key={pet.pet_id} className="pet-group">
+                          <button
+                            type="button"
+                            className={`pet-group-head${petOpen ? ' is-open' : ''}`}
+                            onClick={() => togglePet(pet.pet_id)}
+                          >
+                            <span className="pet-group-icon" aria-hidden="true">
+                              {pet.pet_type?.[0]?.toUpperCase() ?? 'P'}
+                            </span>
+                            <span className="pet-group-name">{pet.pet_name}</span>
+                            <span className="pet-group-type">
+                              {pet.pet_type}{pet.pet_age ? ` · ${pet.pet_age}` : ''}
+                            </span>
+                            <span className="pet-group-count">
+                              {pet.records.length} record{pet.records.length !== 1 ? 's' : ''}
+                            </span>
+                            <span className="pet-group-chevron" aria-hidden="true">
+                              {petOpen ? '▲' : '▼'}
+                            </span>
+                          </button>
+
+                          {petOpen && (
+                            <ul className="pet-records-list">
+                              {pet.records.map((r) => (
+                                <li
+                                  key={r.vaccine_id}
+                                  className="pet-record-row"
+                                  onClick={() => setViewTarget(r)}
+                                >
+                                  <span className="prl-date">{fmtDate(r.vaccine_date)}</span>
+                                  <span className={`records-tag records-tag--${r.is_office_visit ? 'office' : 'drive'}`}>
+                                    {r.is_office_visit ? 'Office' : 'Drive'}
+                                  </span>
+                                  <span className="prl-vaccine">{r.vaccine_details}</span>
+                                  <span className="prl-vet">{r.vet_name ?? '—'}</span>
+                                  <span className="prl-code">{r.approval_code ?? '—'}</span>
+                                  <div className="prl-actions" onClick={(e) => e.stopPropagation()}>
+                                    <button type="button" className="btn btn-outline records-action-btn" onClick={() => setEditTarget(r)}>Edit</button>
+                                    <button type="button" className="records-del-btn" onClick={() => setDeleteTarget(r)}>Delete</button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-            </li>
-          ))}
-        </ul>
+            )
+          })}
+        </div>
       )}
 
       {viewTarget && (
