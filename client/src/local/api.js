@@ -20,7 +20,7 @@ async function request(path, { method = 'GET', body, signal } = {}) {
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
-    const err = new Error(data?.error ?? `Request failed (${res.status})`);
+    const err = new Error(data?.message ?? data?.error ?? `Request failed (${res.status})`);
     err.status = res.status;
     err.detail = data?.detail;
     throw err;

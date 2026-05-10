@@ -69,7 +69,7 @@ function ClusteringAnalytics() {
       })
       .catch((err) => {
         if (err.status === 503) setOffline(true)
-        else setError(err.detail ?? err.message)
+        else setError(err.message ?? err.detail ?? 'Something went wrong.')
         setLoading(false)
       })
   }, [])
@@ -243,7 +243,6 @@ function AllBarangaysModal({ onClose, onSelectBarangay }) {
 
   const q = search.trim().toLowerCase()
   const filtered = q ? rows.filter((r) => r.barangay_name.toLowerCase().includes(q)) : rows
-
   const noRecord   = filtered.filter((r) => r.total_pets === 0).length
   const withRecord = filtered.length - noRecord
 
