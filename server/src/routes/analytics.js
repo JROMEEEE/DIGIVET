@@ -132,4 +132,6 @@ router.get('/barangay-coverage', (req, res) => {
   proxyToR(`/barangay-coverage${s ? '?' + s : ''}`, res);
 });
 
+
+
 export default router;

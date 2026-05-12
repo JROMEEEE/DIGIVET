@@ -186,6 +186,68 @@
   width: 100%;
 }
 
+/* ── Tab toggle ─────────────────────────────────────────────── */
+.records-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  align-self: flex-start;
+}
+
+.records-tab {
+  padding: 7px 20px;
+  border-radius: 7px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.records-tab:hover    { background: rgba(0,0,0,0.04); color: var(--text); }
+.records-tab.is-active {
+  background: #fff;
+  color: var(--maroon);
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+/* ── Registry view ───────────────────────────────────────────── */
+.registry { display: flex; flex-direction: column; gap: 14px; }
+
+.registry-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.registry-toolbar .encode-input { flex: 1; }
+.registry-count { font-size: 0.82rem; color: var(--text-muted); white-space: nowrap; font-weight: 600; }
+.registry-hint  { font-size: 0.84rem; color: var(--text-muted); font-style: italic; margin: 4px 8px; }
+.registry-hint--none { color: #dc2626; }
+
+.registry-vax-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.registry-vax-badge--ok   { background: #d1fae5; color: #065f46; }
+.registry-vax-badge--none { background: #fee2e2; color: #991b1b; }
+
+.registry-vax-list {
+  border-top: 1px solid var(--border);
+  padding: 10px 14px;
+  background: var(--bg-soft);
+}
+
+/* ── Header actions ──────────────────────────────────────────── */
 .records-header-actions {
   display: flex;
   gap: 8px;

@@ -104,8 +104,10 @@ function(req, res) {
                             THEN p.pet_id END)::int                          AS vaccinated_pets
       FROM barangay_table b
       LEFT JOIN owner_table   o ON o.barangay_id = b.barangay_id
-      LEFT JOIN pet_table     p ON p.owner_id     = o.owner_id
-      LEFT JOIN vaccine_table v ON v.pet_id       = p.pet_id
+      LEFT JOIN pet_table     p ON p.owner_id = o.owner_id
+                                AND p.deleted_at IS NULL
+      LEFT JOIN vaccine_table v ON v.pet_id = p.pet_id
+                                AND v.deleted_at IS NULL
       GROUP BY b.barangay_id, b.barangay_name
       HAVING COUNT(DISTINCT p.pet_id) > 0
       ORDER BY b.barangay_name
@@ -119,10 +121,14 @@ function(req, res) {
     }
 
     df$coverage_rate <- round(df$vaccinated_pets / pmax(df$total_pets, 1) * 100, 1)
-    df$missed        <- df$total_pets - df$vaccinated_pets
+    df$missed        <- df$total_pets - df$vaccinated_pets  # kept for display only
 
-    # Scale features: coverage rate, total pets, missed pets
-    features <- scale(df[, c("coverage_rate", "total_pets", "missed")])
+    # Use only 2 independent features:
+    #   coverage_rate — vaccination proportion (risk level)
+    #   total_pets    — barangay size (scale / urgency)
+    # 'missed' is excluded as a clustering feature because it is linearly
+    # derived from total_pets and vaccinated_pets, which inflates distances.
+    features <- scale(df[, c("coverage_rate", "total_pets")])
 
     # K-Means (k=3, multiple restarts for stability)
     set.seed(42)
@@ -164,7 +170,7 @@ function(req, res) {
       silhouette_score = silhouette_score,
       k                = 3,
       n_barangays      = nrow(df),
-      method           = "K-Means (k=3) · features: Coverage Rate, Total Pets, Missed Pets",
+      method           = "K-Means (k=3) · features: Coverage Rate, Total Pets",
       cluster_summary  = summary_df,
       barangays        = df[, c("barangay_name", "cluster_label", "coverage_rate",
                                 "total_pets", "vaccinated_pets", "missed")]

@@ -98,18 +98,18 @@ router.get('/status', requireAuth, async (req, res, next) => {
     const lastSync = log.rows[0] ?? null;
     const since    = lastSync?.last_sync_at ?? null;
 
-    // Count only ACTIVE (non-deleted) rows changed since last sync.
-    // Soft-deleted rows are excluded — they're handled as hard-deletes in Supabase.
+    // Count ALL changed rows since last sync — both active (upserts) and
+    // soft-deleted (pending hard-deletes in Supabase).
     const tableCounts = await Promise.all(
       SYNC_TABLES.map(async ({ name, softDelete }) => {
-        const notDeleted = softDelete ? 'AND deleted_at IS NULL' : '';
         const { rows } = since
           ? await query(
               `SELECT COUNT(*)::int AS n FROM ${name}
-               WHERE updated_at > $1 ${notDeleted}`,
+               WHERE updated_at > $1`,
               [since],
             )
           : await query(
+              // First sync: only count active rows (deletions don't exist yet)
               `SELECT COUNT(*)::int AS n FROM ${name}
                ${softDelete ? 'WHERE deleted_at IS NULL' : ''}`,
             );
@@ -144,25 +144,53 @@ router.post('/push', requireAuth, async (req, res, next) => {
 
   try {
     for (const { name, pk, softDelete } of SYNC_TABLES) {
-      const notDeleted = softDelete ? 'AND deleted_at IS NULL' : '';
-      const { rows } = since
-        ? await query(`SELECT * FROM ${name} WHERE updated_at > $1 ${notDeleted}`, [since])
-        : await query(`SELECT * FROM ${name} ${softDelete ? 'WHERE deleted_at IS NULL' : ''}`);
 
-      if (rows.length === 0) {
-        results.push({ table: name, synced: 0, status: 'empty' });
-        continue;
+      // ── 1. Upsert active records ───────────────────────────
+      const activeRows = since
+        ? (await query(`SELECT * FROM ${name} WHERE updated_at > $1 ${softDelete ? 'AND deleted_at IS NULL' : ''}`, [since])).rows
+        : (await query(`SELECT * FROM ${name} ${softDelete ? 'WHERE deleted_at IS NULL' : ''}`)).rows;
+
+      let upsertOk = true;
+      if (activeRows.length > 0) {
+        const { error } = await supabaseAdmin
+          .from(name)
+          .upsert(activeRows, { onConflict: pk });
+        if (error) {
+          results.push({ table: name, synced: 0, status: 'error', error: error.message });
+          upsertOk = false;
+        } else {
+          totalSynced += activeRows.length;
+        }
       }
 
-      const { error } = await supabaseAdmin
-        .from(name)
-        .upsert(rows, { onConflict: pk });
+      // ── 2. Hard-delete soft-deleted rows from Supabase ─────
+      let deleteOk = true;
+      if (softDelete && upsertOk) {
+        const deletedRows = since
+          ? (await query(`SELECT ${pk} FROM ${name} WHERE updated_at > $1 AND deleted_at IS NOT NULL`, [since])).rows
+          : [];
 
-      if (error) {
-        results.push({ table: name, synced: 0, status: 'error', error: error.message });
-      } else {
-        results.push({ table: name, synced: rows.length, status: 'ok' });
-        totalSynced += rows.length;
+        if (deletedRows.length > 0) {
+          const ids = deletedRows.map((r) => r[pk]);
+          const { error } = await supabaseAdmin
+            .from(name)
+            .delete()
+            .in(pk, ids);
+          if (error) {
+            results.push({ table: name, synced: activeRows.length, status: 'error', error: `delete: ${error.message}` });
+            deleteOk = false;
+          } else {
+            totalSynced += deletedRows.length;
+          }
+        }
+      }
+
+      if (upsertOk && deleteOk) {
+        results.push({
+          table: name,
+          synced: activeRows.length,
+          status: activeRows.length === 0 && !softDelete ? 'empty' : 'ok',
+        });
       }
     }
 

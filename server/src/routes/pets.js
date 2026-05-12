@@ -1,5 +1,5 @@
 import express from 'express';
-import { query } from '../local/db.js';
+import { query, pool } from '../local/db.js';
 import { syncRecord } from '../lib/syncRecord.js';
 
 const router = express.Router();
@@ -83,17 +83,43 @@ router.put('/:id', async (req, res, next) => {
 });
 
 router.delete('/:id', async (req, res, next) => {
+  const client = await pool.connect();
   try {
-    const { rows } = await query(
+    await client.query('BEGIN');
+
+    // Collect vaccine IDs before soft-deleting them
+    const { rows: vaxRows } = await client.query(
+      `SELECT vaccine_id FROM vaccine_table WHERE pet_id = $1 AND deleted_at IS NULL`,
+      [req.params.id],
+    );
+    const vaccineIds = vaxRows.map((r) => r.vaccine_id);
+
+    // Cascade soft-delete vaccinations
+    if (vaccineIds.length > 0) {
+      await client.query(
+        `UPDATE vaccine_table SET deleted_at = NOW() WHERE vaccine_id = ANY($1)`,
+        [vaccineIds],
+      );
+    }
+
+    // Soft-delete the pet
+    const { rows } = await client.query(
       `UPDATE pet_table SET deleted_at = NOW()
        WHERE pet_id = $1 AND deleted_at IS NULL
        RETURNING pet_id`,
       [req.params.id],
     );
-    if (!rows[0]) return res.status(404).json({ error: 'Pet not found' });
+    if (!rows[0]) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Pet not found' }); }
+
+    await client.query('COMMIT');
+
+    // Hard-delete all from Supabase
     syncRecord('pet_table', 'pet_id', rows[0].pet_id);
+    for (const vid of vaccineIds) syncRecord('vaccine_table', 'vaccine_id', vid);
+
     res.status(204).end();
-  } catch (err) { next(err); }
+  } catch (err) { await client.query('ROLLBACK'); next(err); }
+  finally { client.release(); }
 });
 
 export default router;

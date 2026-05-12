@@ -93,30 +93,40 @@ router.delete('/:id', async (req, res, next) => {
   try {
     await client.query('BEGIN');
 
-    // 1. Collect affected pet and vaccine IDs before deleting
+    // 1. Collect affected pet IDs
     const { rows: petRows } = await client.query(
       `SELECT pet_id FROM pet_table WHERE owner_id = $1 AND deleted_at IS NULL`,
       [req.params.id],
     );
     const petIds = petRows.map((r) => r.pet_id);
 
-    // 2. Cascade soft-delete vaccinations
+    // 2. Collect vaccine IDs BEFORE soft-deleting them
+    let vaccineIds = [];
     if (petIds.length > 0) {
+      const { rows: vaxRows } = await client.query(
+        `SELECT vaccine_id FROM vaccine_table WHERE pet_id = ANY($1) AND deleted_at IS NULL`,
+        [petIds],
+      );
+      vaccineIds = vaxRows.map((r) => r.vaccine_id);
+    }
+
+    // 3. Cascade soft-delete vaccinations
+    if (vaccineIds.length > 0) {
       await client.query(
         `UPDATE vaccine_table SET deleted_at = NOW()
-         WHERE pet_id = ANY($1) AND deleted_at IS NULL`,
-        [petIds],
+         WHERE vaccine_id = ANY($1)`,
+        [vaccineIds],
       );
     }
 
-    // 3. Cascade soft-delete pets
+    // 4. Cascade soft-delete pets
     await client.query(
       `UPDATE pet_table SET deleted_at = NOW()
        WHERE owner_id = $1 AND deleted_at IS NULL`,
       [req.params.id],
     );
 
-    // 4. Soft-delete the owner
+    // 5. Soft-delete the owner
     const { rows } = await client.query(
       `UPDATE owner_table SET deleted_at = NOW()
        WHERE owner_id = $1 AND deleted_at IS NULL
@@ -127,9 +137,10 @@ router.delete('/:id', async (req, res, next) => {
 
     await client.query('COMMIT');
 
-    // Sync all affected records to Supabase (fire-and-forget hard deletes)
+    // Sync all affected records to Supabase — hard-deletes since deleted_at is now set
     syncRecord('owner_table', 'owner_id', rows[0].owner_id);
-    for (const pid of petIds) syncRecord('pet_table', 'pet_id', pid);
+    for (const pid of petIds)     syncRecord('pet_table',     'pet_id',     pid);
+    for (const vid of vaccineIds)  syncRecord('vaccine_table', 'vaccine_id', vid);
 
     res.status(204).end();
   } catch (err) { await client.query('ROLLBACK'); next(err); }

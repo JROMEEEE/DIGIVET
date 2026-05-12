@@ -36,7 +36,8 @@ function groupByOwnerPet(records) {
 }
 
 export default function RecordsPage() {
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const [activeTab, setActiveTab] = useState('records') // 'records' | 'registry'
   const [sessions, setSessions]         = useState([])
   const [vets, setVets]                 = useState([])
   const [sessionFilter, setSessionFilter]   = useState('')
@@ -168,6 +169,17 @@ export default function RecordsPage() {
       {error && <div className="encode-banner encode-banner--error">{error}</div>}
       {flash && <div className="encode-banner encode-banner--ok">{flash}</div>}
 
+      {/* Tab toggle */}
+      <div className="records-tabs">
+        <button type="button" className={`records-tab${activeTab === 'records' ? ' is-active' : ''}`}
+          onClick={() => setActiveTab('records')}>Vaccination Records</button>
+        <button type="button" className={`records-tab${activeTab === 'registry' ? ' is-active' : ''}`}
+          onClick={() => setActiveTab('registry')}>Owner Registry</button>
+      </div>
+
+      {activeTab === 'registry' && <RegistryView />}
+
+      {activeTab === 'records' && <>
       <div className="records-topbar">
         <div className="records-count">
           {loading ? (
@@ -448,6 +460,8 @@ export default function RecordsPage() {
           </div>
         </div>
       )}
+      </>}
+
       {showOwnersModal && (
         <OwnersManageModal onClose={() => setShowOwnersModal(false)} />
       )}
@@ -455,6 +469,178 @@ export default function RecordsPage() {
         <PetsManageModal onClose={() => setShowPetsModal(false)} />
       )}
     </main>
+  )
+}
+
+/* ── Owner Registry (all owners, vaccinated or not) ─────────── */
+function RegistryView() {
+  const [owners, setOwners]           = useState([])
+  const [search, setSearch]           = useState('')
+  const [loading, setLoading]         = useState(true)
+  const [expandedOwners, setExpandedOwners] = useState(new Set())
+  const [ownerPets, setOwnerPets]     = useState({})   // owner_id → pets[]
+  const [expandedPets, setExpandedPets]     = useState(new Set())
+  const [petVax, setPetVax]           = useState({})   // pet_id → vaccinations[]
+  const [loadingPets, setLoadingPets] = useState(new Set())
+  const [loadingVax, setLoadingVax]   = useState(new Set())
+
+  useEffect(() => {
+    api.owners.search('', 500)
+      .then((os) => { setOwners(os); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const q = search.trim().toLowerCase()
+  const filtered = q
+    ? owners.filter((o) =>
+        o.owner_name?.toLowerCase().includes(q) ||
+        o.contact_number?.includes(q) ||
+        o.barangay_name?.toLowerCase().includes(q))
+    : owners
+
+  async function toggleOwner(owner) {
+    const id = owner.owner_id
+    setExpandedOwners((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+    if (!ownerPets[id]) {
+      setLoadingPets((prev) => new Set(prev).add(id))
+      try {
+        const pets = await api.pets.list({ owner_id: id })
+        setOwnerPets((prev) => ({ ...prev, [id]: pets }))
+      } catch {}
+      setLoadingPets((prev) => { const next = new Set(prev); next.delete(id); return next })
+    }
+  }
+
+  async function togglePet(pet) {
+    const id = pet.pet_id
+    setExpandedPets((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+    if (!petVax[id]) {
+      setLoadingVax((prev) => new Set(prev).add(id))
+      try {
+        const vax = await api.vaccinations.list(id)
+        setPetVax((prev) => ({ ...prev, [id]: vax }))
+      } catch {}
+      setLoadingVax((prev) => { const next = new Set(prev); next.delete(id); return next })
+    }
+  }
+
+  return (
+    <div className="registry">
+      <div className="registry-toolbar">
+        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by owner name, contact, or barangay…"
+          className="encode-input" />
+        <span className="registry-count">
+          {loading ? '…' : `${filtered.length} owner${filtered.length !== 1 ? 's' : ''}`}
+        </span>
+      </div>
+
+      {loading ? (
+        <p className="records-state">Loading owners…</p>
+      ) : filtered.length === 0 ? (
+        <p className="records-state">No owners found.</p>
+      ) : (
+        <div className="owner-groups">
+          {filtered.map((owner) => {
+            const isOpen = expandedOwners.has(owner.owner_id)
+            const pets   = ownerPets[owner.owner_id] ?? []
+            const isLoadingPets = loadingPets.has(owner.owner_id)
+
+            return (
+              <div key={owner.owner_id} className="owner-group">
+                <button type="button"
+                  className={`owner-group-head${isOpen ? ' is-open' : ''}`}
+                  onClick={() => toggleOwner(owner)}>
+                  <div className="owner-group-avatar">
+                    {owner.owner_name.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="owner-group-name">{owner.owner_name}</span>
+                  {owner.barangay_name && (
+                    <span className="owner-group-brgy">Brgy. {owner.barangay_name}</span>
+                  )}
+                  <span className="owner-group-meta">{owner.contact_number}</span>
+                  <span className="owner-group-chevron">{isOpen ? '▲' : '▼'}</span>
+                </button>
+
+                {isOpen && (
+                  <div className="owner-group-body">
+                    {isLoadingPets ? (
+                      <p className="registry-hint">Loading pets…</p>
+                    ) : pets.length === 0 ? (
+                      <p className="registry-hint">No pets registered.</p>
+                    ) : (
+                      pets.map((pet) => {
+                        const petOpen = expandedPets.has(pet.pet_id)
+                        const vax     = petVax[pet.pet_id] ?? []
+                        const isLoadingVax = loadingVax.has(pet.pet_id)
+
+                        return (
+                          <div key={pet.pet_id} className="pet-group">
+                            <button type="button"
+                              className={`pet-group-head${petOpen ? ' is-open' : ''}`}
+                              onClick={() => togglePet(pet)}>
+                              <span className="pet-group-icon">
+                                {pet.pet_type?.[0]?.toUpperCase() ?? 'P'}
+                              </span>
+                              <span className="pet-group-name">{pet.pet_name}</span>
+                              <span className="pet-group-type">
+                                {pet.pet_type} · {pet.pet_age}
+                              </span>
+                              {petVax[pet.pet_id] !== undefined ? (
+                                <span className={`registry-vax-badge${vax.length > 0 ? ' registry-vax-badge--ok' : ' registry-vax-badge--none'}`}>
+                                  {vax.length > 0 ? `✓ ${vax.length} vaccination${vax.length !== 1 ? 's' : ''}` : '✗ Not vaccinated'}
+                                </span>
+                              ) : (
+                                <span className="pet-group-count">View records</span>
+                              )}
+                              <span className="pet-group-chevron">{petOpen ? '▲' : '▼'}</span>
+                            </button>
+
+                            {petOpen && (
+                              <div className="registry-vax-list">
+                                {isLoadingVax ? (
+                                  <p className="registry-hint">Loading…</p>
+                                ) : vax.length === 0 ? (
+                                  <p className="registry-hint registry-hint--none">
+                                    No vaccinations recorded for {pet.pet_name} yet.
+                                  </p>
+                                ) : (
+                                  <ul className="encode-recent">
+                                    {vax.map((r) => (
+                                      <li key={r.vaccine_id}>
+                                        <span className="encode-recent-date">
+                                          {fmtDate(r.vaccine_date)}
+                                        </span>
+                                        <span className="encode-recent-main">{r.vaccine_details}</span>
+                                        <span className="encode-recent-sub">
+                                          Lot {r.manufacturer_no} · {r.vet_name ?? '—'} · {r.approval_code ?? '—'}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
   )
 }
 
