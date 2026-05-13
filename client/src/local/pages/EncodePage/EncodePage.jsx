@@ -151,7 +151,14 @@ export default function EncodePage() {
         barangay_name: barangays.find((b) => b.barangay_id === created.barangay_id)?.barangay_name,
       }
       setSelectedOwner(enriched)
-      flashMessage(`Owner "${enriched.owner_name}" added.`)
+      if (created.email_error) {
+        setError(`Owner saved, but email failed: ${created.email_error}`)
+      } else {
+        const msg = created.account_created
+          ? `Owner "${enriched.owner_name}" added — login credentials sent to ${enriched.email}.`
+          : `Owner "${enriched.owner_name}" added.`
+        flashMessage(msg)
+      }
     } catch (err) { setError(err.message) }
   }
 
@@ -768,18 +775,10 @@ function DriveRegistrationForm({ onSubmit, onCancel }) {
         <span>Contact number <span className="encode-label-hint">(optional)</span></span>
         <input value={owner.contact_number} onChange={updO('contact_number')} className="encode-input" />
       </label>
-      <div className="encode-form-wide encode-account-toggle">
-        <span className="encode-account-toggle-label">Create online account for owner</span>
-        <button type="button" className={`encode-toggle-btn${wantsAccount ? ' is-on' : ''}`} onClick={toggleAccount} aria-pressed={wantsAccount}>
-          <span className="encode-toggle-knob" />
-        </button>
-      </div>
-      {wantsAccount && (
-        <label className="encode-form-wide">
-          <span>Email <span className="encode-label-hint">(will be used to log in online)</span></span>
-          <input type="email" required value={owner.email} onChange={updO('email')} className="encode-input" placeholder="owner@example.com" />
-        </label>
-      )}
+      <label>
+        Email address <span style={{ fontWeight: 'normal', color: '#888', fontSize: '0.85em' }}>(optional)</span>
+        <input type="email" value={owner.email} onChange={updO('email')} className="encode-input" placeholder="owner@email.com" />
+      </label>
       <p className="encode-form-wide drive-reg-section">Pet info</p>
       <label>Pet name
         <input required value={pet.pet_name} onChange={updP('pet_name')} className="encode-input" />
@@ -847,6 +846,10 @@ function OwnerForm({ barangays, onSubmit }) {
           <option value="">— select —</option>
           {barangays.map((b) => <option key={b.barangay_id} value={b.barangay_id}>{b.barangay_name}</option>)}
         </select>
+      </label>
+      <label>
+        Email address <span style={{ fontWeight: 'normal', color: '#888', fontSize: '0.85em' }}>(optional — login credentials will be sent here)</span>
+        <input type="email" value={form.email} onChange={update('email')} className="encode-input" placeholder="owner@email.com" />
       </label>
       <div className="encode-form-actions"><button type="submit" className="btn btn-primary">Save owner</button></div>
     </form>

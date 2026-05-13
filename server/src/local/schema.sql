@@ -127,6 +127,10 @@ ALTER TABLE owner_table   ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE pet_table     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 ALTER TABLE vaccine_table ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 
+-- ── Owner email + user account link ──────────────────────────────
+ALTER TABLE owner_table  ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS owner_id INT REFERENCES owner_table(owner_id) ON DELETE SET NULL;
+
 -- ── Sync log: single-row table tracking last push to Supabase ────
 CREATE TABLE IF NOT EXISTS sync_log (
   id               INT         PRIMARY KEY DEFAULT 1,

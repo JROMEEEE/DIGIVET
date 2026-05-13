@@ -1,6 +1,15 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import { query, pool } from '../local/db.js';
 import { syncRecord } from '../lib/syncRecord.js';
+import { sendOwnerCredentials } from '../lib/email.js';
+
+function generatePassword(len = 10) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let out = '';
+  for (let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  return out;
+}
 
 const router = express.Router();
 
@@ -11,7 +20,7 @@ router.get('/', async (req, res) => {
   if (!q) {
     const { rows } = await query(
       `SELECT o.owner_id, o.owner_name, o.contact_number,
-              o.barangay_id, b.barangay_name
+              o.email, o.barangay_id, b.barangay_name
        FROM owner_table o
        LEFT JOIN barangay_table b ON b.barangay_id = o.barangay_id
        WHERE o.deleted_at IS NULL
@@ -25,7 +34,7 @@ router.get('/', async (req, res) => {
   const like = `%${q}%`;
   const { rows } = await query(
     `SELECT o.owner_id, o.owner_name, o.contact_number,
-            o.barangay_id, b.barangay_name
+            o.email, o.barangay_id, b.barangay_name
      FROM owner_table o
      LEFT JOIN barangay_table b ON b.barangay_id = o.barangay_id
      WHERE o.deleted_at IS NULL
@@ -42,7 +51,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const { rows } = await query(
     `SELECT o.owner_id, o.owner_name, o.contact_number,
-            o.barangay_id, b.barangay_name
+            o.email, o.barangay_id, b.barangay_name
      FROM owner_table o
      LEFT JOIN barangay_table b ON b.barangay_id = o.barangay_id
      WHERE o.owner_id = $1 AND o.deleted_at IS NULL`,
@@ -53,6 +62,83 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const { owner_name, contact_number, barangay_id, email } = req.body ?? {};
+    console.log('[owners POST] received:', { owner_name, contact_number, barangay_id, email });
+    if (!owner_name || !contact_number || !barangay_id) {
+      return res.status(400).json({
+        error: 'owner_name, contact_number, and barangay_id are required',
+      });
+    }
+
+    await client.query('BEGIN');
+
+    // Insert owner (with optional email)
+    const { rows: ownerRows } = await client.query(
+      `INSERT INTO owner_table (owner_name, contact_number, barangay_id, email)
+       VALUES ($1, $2, $3, $4)
+       RETURNING owner_id, owner_name, contact_number, barangay_id, email`,
+      [owner_name, contact_number, barangay_id, email ?? null],
+    );
+    const owner = ownerRows[0];
+
+    let accountCreated = false;
+
+    if (email) {
+      // Check if a user_profile already exists for this email
+      const existing = await client.query(
+        `SELECT id FROM user_profile WHERE local_email = $1`, [email]
+      );
+
+      if (existing.rows.length === 0) {
+        const password = generatePassword();
+        const hash = await bcrypt.hash(password, 10);
+
+        await client.query(
+          `INSERT INTO user_profile (display_name, role, local_email, local_password_hash, owner_id)
+           VALUES ($1, 'OWNER', $2, $3, $4)`,
+          [owner_name, email, hash, owner.owner_id],
+        );
+
+        await client.query('COMMIT');
+
+        let emailError = null;
+        try {
+          await sendOwnerCredentials({ toEmail: email, ownerName: owner_name, password });
+          console.log('[email] credentials sent to', email);
+        } catch (err) {
+          emailError = err.message;
+          console.error('[email] FAILED to send to', email, '—', err.message, err.code ?? '');
+        }
+
+        accountCreated = true;
+        if (emailError) {
+          syncRecord('owner_table', 'owner_id', owner.owner_id);
+          return res.status(201).json({ ...owner, account_created: true, email_error: emailError });
+        }
+      } else {
+        // Link existing account to this owner if not already linked
+        await client.query(
+          `UPDATE user_profile SET owner_id = $1
+           WHERE local_email = $2 AND owner_id IS NULL`,
+          [owner.owner_id, email],
+        );
+        await client.query('COMMIT');
+        accountCreated = true;
+      }
+    } else {
+      await client.query('COMMIT');
+    }
+
+    syncRecord('owner_table', 'owner_id', owner.owner_id);
+    res.status(201).json({ ...owner, account_created: accountCreated });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    next(err);
+  } finally {
+    client.release();
+  }
   try {
     const { owner_name, barangay_id, email, contact_number } = req.body ?? {};
     if (!owner_name || !barangay_id) {
@@ -117,6 +203,8 @@ router.post('/', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   try {
     const { owner_name, contact_number, barangay_id, email } = req.body ?? {};
+    if (!owner_name || !contact_number || !barangay_id) {
+      return res.status(400).json({ error: 'owner_name, contact_number, and barangay_id are required' });
     if (!owner_name || !barangay_id) {
       return res.status(400).json({ error: 'owner_name and barangay_id are required' });
     }
@@ -146,6 +234,7 @@ router.put('/:id', async (req, res, next) => {
        SET owner_name = $1, contact_number = $2, barangay_id = $3, email = $4
        WHERE owner_id = $5 AND deleted_at IS NULL
        RETURNING owner_id, owner_name, contact_number, barangay_id, email`,
+      [owner_name, contact_number, Number(barangay_id), email ?? null, req.params.id],
       [owner_name, contact_number ?? '', Number(barangay_id), email ?? null, req.params.id],
     );
     if (!rows[0]) return res.status(404).json({ error: 'Owner not found' });
