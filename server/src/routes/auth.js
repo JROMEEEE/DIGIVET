@@ -7,15 +7,15 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { query, pool } from '../local/db.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { sendOwnerCredentials } from '../lib/email.js';
 
 const router = express.Router();
 const JWT_SECRET  = process.env.JWT_SECRET ?? 'digivet-dev-secret-change-in-prod';
 const SALT_ROUNDS = 10;
 
 function signToken(user) {
-  // UUID id instead of integer — matches Supabase auth.users shape
   return jwt.sign(
-    { id: user.id, role: user.role },
+    { id: user.id, role: user.role, owner_id: user.owner_id ?? null },
     JWT_SECRET,
     { expiresIn: '7d' },
   );
@@ -50,7 +50,7 @@ router.post('/register', async (req, res, next) => {
     const { rows } = await query(
       `INSERT INTO user_profile (display_name, role, local_email, local_password_hash)
        VALUES ($1, 'ADMIN', $2, $3)
-       RETURNING id, display_name, role, local_email AS email, created_at`,
+       RETURNING id, display_name, role, local_email AS email, owner_id, created_at`,
       [display_name, email, hash],
     );
 
@@ -69,7 +69,7 @@ router.post('/login', async (req, res, next) => {
 
     const { rows } = await query(
       `SELECT id, display_name, role, local_email AS email,
-              local_password_hash, created_at
+              local_password_hash, owner_id, created_at
        FROM user_profile WHERE local_email = $1`,
       [email],
     );
@@ -97,7 +97,7 @@ router.post('/login', async (req, res, next) => {
 router.get('/me', requireAuth, async (req, res, next) => {
   try {
     const { rows } = await query(
-      `SELECT id, display_name, role, local_email AS email, created_at
+      `SELECT id, display_name, role, local_email AS email, owner_id, created_at
        FROM user_profile WHERE id = $1`,
       [req.user.id],
     );
@@ -135,7 +135,7 @@ router.put('/me', requireAuth, async (req, res, next) => {
     const { rows } = await query(
       `UPDATE user_profile SET ${sets.join(', ')}
        WHERE id = $${params.length}
-       RETURNING id, display_name, role, local_email AS email, created_at`,
+       RETURNING id, display_name, role, local_email AS email, owner_id, created_at`,
       params,
     );
     res.json({ user: safeUser(rows[0]) });
@@ -152,6 +152,18 @@ router.delete('/me', requireAuth, async (req, res, next) => {
     if (!rows[0]) return res.status(404).json({ error: 'User not found' });
     res.status(204).end();
   } catch (err) { next(err); }
+});
+
+/* ── Test email (dev only) ────────────────────────────────────── */
+router.post('/test-email', async (req, res, next) => {
+  try {
+    const { to } = req.body ?? {};
+    if (!to) return res.status(400).json({ error: 'to is required' });
+    await sendOwnerCredentials({ toEmail: to, ownerName: 'Test Owner', password: 'TestPass123' });
+    res.json({ ok: true, message: `Test email sent to ${to}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message, code: err.code });
+  }
 });
 
 export default router;

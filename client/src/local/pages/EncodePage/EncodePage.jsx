@@ -144,13 +144,21 @@ export default function EncodePage() {
         owner_name: form.owner_name,
         contact_number: form.contact_number,
         barangay_id: Number(form.barangay_id),
+        email: form.email || undefined,
       })
       const enriched = {
         ...created,
         barangay_name: barangays.find((b) => b.barangay_id === created.barangay_id)?.barangay_name,
       }
       setSelectedOwner(enriched)
-      flashMessage(`Owner "${enriched.owner_name}" added.`)
+      if (created.email_error) {
+        setError(`Owner saved, but email failed: ${created.email_error}`)
+      } else {
+        const msg = created.account_created
+          ? `Owner "${enriched.owner_name}" added — login credentials sent to ${enriched.email}.`
+          : `Owner "${enriched.owner_name}" added.`
+        flashMessage(msg)
+      }
     } catch (err) { setError(err.message) }
   }
 
@@ -181,6 +189,7 @@ export default function EncodePage() {
         owner_name: ownerForm.owner_name,
         contact_number: ownerForm.contact_number,
         barangay_id: session.barangay_id,
+        email: ownerForm.email || undefined,
       })
       const pet = await api.pets.create({
         owner_id: owner.owner_id,
@@ -748,7 +757,7 @@ function DriveRecord({ pet, vets, showVetForm, onToggleVetForm, onCreateVet, onS
 }
 
 function DriveRegistrationForm({ onSubmit, onCancel }) {
-  const [owner, setOwner] = useState({ owner_name: '', contact_number: '' })
+  const [owner, setOwner] = useState({ owner_name: '', contact_number: '', email: '' })
   const [pet, setPet]     = useState({ pet_name: '', pet_type: '', pet_age: '', pet_color: '' })
   const updO = (k) => (e) => setOwner((p) => ({ ...p, [k]: e.target.value }))
   const updP = (k) => (e) => setPet((p) => ({ ...p, [k]: e.target.value }))
@@ -760,6 +769,10 @@ function DriveRegistrationForm({ onSubmit, onCancel }) {
       </label>
       <label>Contact number
         <input required value={owner.contact_number} onChange={updO('contact_number')} className="encode-input" />
+      </label>
+      <label>
+        Email address <span style={{ fontWeight: 'normal', color: '#888', fontSize: '0.85em' }}>(optional)</span>
+        <input type="email" value={owner.email} onChange={updO('email')} className="encode-input" placeholder="owner@email.com" />
       </label>
       <p className="encode-form-wide drive-reg-section">Pet info</p>
       <label>Pet name
@@ -798,7 +811,7 @@ function Step({ n, title, done, disabled, summary, children }) {
 }
 
 function OwnerForm({ barangays, onSubmit }) {
-  const [form, setForm] = useState({ owner_name: '', contact_number: '', barangay_id: '' })
+  const [form, setForm] = useState({ owner_name: '', contact_number: '', barangay_id: '', email: '' })
   const update = (k) => (e) => setForm((prev) => ({ ...prev, [k]: e.target.value }))
   return (
     <form className="encode-form" onSubmit={(e) => { e.preventDefault(); onSubmit(form) }}>
@@ -809,6 +822,10 @@ function OwnerForm({ barangays, onSubmit }) {
           <option value="">— select —</option>
           {barangays.map((b) => <option key={b.barangay_id} value={b.barangay_id}>{b.barangay_name}</option>)}
         </select>
+      </label>
+      <label>
+        Email address <span style={{ fontWeight: 'normal', color: '#888', fontSize: '0.85em' }}>(optional — login credentials will be sent here)</span>
+        <input type="email" value={form.email} onChange={update('email')} className="encode-input" placeholder="owner@email.com" />
       </label>
       <div className="encode-form-actions"><button type="submit" className="btn btn-primary">Save owner</button></div>
     </form>
