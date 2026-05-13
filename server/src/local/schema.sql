@@ -90,6 +90,24 @@ CREATE TABLE IF NOT EXISTS user_profile (
   created_at          TIMESTAMPTZ  DEFAULT NOW()
 );
 
+-- Columns present in collaborator schema (idempotent).
+ALTER TABLE owner_table  ADD COLUMN IF NOT EXISTS email    VARCHAR(255);
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS owner_id INT;
+
+-- contact_number becomes optional so email can be the primary identifier.
+ALTER TABLE owner_table ALTER COLUMN contact_number DROP NOT NULL;
+ALTER TABLE owner_table ALTER COLUMN contact_number SET DEFAULT '';
+
+-- Unique email per owner (partial — NULL emails are allowed for legacy rows).
+CREATE UNIQUE INDEX IF NOT EXISTS owner_table_email_unique
+  ON owner_table (email)
+  WHERE email IS NOT NULL AND deleted_at IS NULL;
+
+-- Unique owner name among active records — prevents duplicate account creation online.
+CREATE UNIQUE INDEX IF NOT EXISTS owner_table_name_unique
+  ON owner_table (owner_name)
+  WHERE deleted_at IS NULL;
+
 -- Add new columns to vaccine_table (idempotent).
 ALTER TABLE vaccine_table ADD COLUMN IF NOT EXISTS session_id      INT;
 ALTER TABLE vaccine_table ADD COLUMN IF NOT EXISTS is_office_visit BOOL NOT NULL DEFAULT FALSE;
