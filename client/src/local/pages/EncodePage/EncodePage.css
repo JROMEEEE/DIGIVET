@@ -266,6 +266,50 @@
   color: var(--text-muted);
 }
 .encode-form label .encode-input { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text); }
+.encode-label-hint { font-size: 0.72rem; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--text-muted); opacity: 0.75; }
+
+/* ── Online account toggle ─────────────────────────────────── */
+.encode-account-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--maroon-soft);
+  border: 1px solid var(--maroon-light, #e8c8c8);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.encode-account-toggle-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--maroon);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.encode-toggle-btn {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  border: none;
+  background: var(--border);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s;
+  padding: 0;
+}
+.encode-toggle-btn.is-on { background: var(--maroon); }
+.encode-toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+  display: block;
+}
+.encode-toggle-btn.is-on .encode-toggle-knob { transform: translateX(18px); }
 .encode-form-wide { grid-column: 1 / -1; }
 .encode-form-actions {
   grid-column: 1 / -1;

@@ -758,7 +758,12 @@ function OwnersManageModal({ onClose }) {
 }
 
 function OwnerFormModal({ owner, barangays, onSave, onCancel }) {
-  const [form, setForm] = useState({ owner_name: owner?.owner_name ?? '', contact_number: owner?.contact_number ?? '', barangay_id: String(owner?.barangay_id ?? '') })
+  const [form, setForm] = useState({
+    owner_name: owner?.owner_name ?? '',
+    contact_number: owner?.contact_number ?? '',
+    email: owner?.email ?? '',
+    barangay_id: String(owner?.barangay_id ?? ''),
+  })
   const u = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
   return (
     <div className="modal-backdrop" onClick={onCancel}>
@@ -766,8 +771,15 @@ function OwnerFormModal({ owner, barangays, onSave, onCancel }) {
         <h3 className="modal-title">{owner ? 'Edit Owner' : 'Add Owner'}</h3>
         <form className="encode-form" style={{ marginTop: 12 }} onSubmit={e => { e.preventDefault(); onSave(form, owner?.owner_id) }}>
           <label>Full name<input required value={form.owner_name} onChange={u('owner_name')} className="encode-input" autoFocus /></label>
-          <label>Contact<input required value={form.contact_number} onChange={u('contact_number')} className="encode-input" /></label>
-          <label>Barangay
+          <label>
+            <span>Contact <span className="encode-label-hint">(optional)</span></span>
+            <input value={form.contact_number} onChange={u('contact_number')} className="encode-input" />
+          </label>
+          <label className="encode-form-wide">
+            <span>Email <span className="encode-label-hint">(optional — enables online account)</span></span>
+            <input type="email" value={form.email} onChange={u('email')} className="encode-input" placeholder="owner@example.com" />
+          </label>
+          <label className="encode-form-wide">Barangay
             <select required value={form.barangay_id} onChange={u('barangay_id')} className="encode-input">
               <option value="">— select —</option>
               {barangays.map(b => <option key={b.barangay_id} value={b.barangay_id}>{b.barangay_name}</option>)}

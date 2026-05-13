@@ -142,8 +142,9 @@ export default function EncodePage() {
     try {
       const created = await api.owners.create({
         owner_name: form.owner_name,
-        contact_number: form.contact_number,
+        contact_number: form.contact_number || '',
         barangay_id: Number(form.barangay_id),
+        email: form.email || undefined,
       })
       const enriched = {
         ...created,
@@ -179,8 +180,9 @@ export default function EncodePage() {
     try {
       const owner = await api.owners.create({
         owner_name: ownerForm.owner_name,
-        contact_number: ownerForm.contact_number,
+        contact_number: ownerForm.contact_number || '',
         barangay_id: session.barangay_id,
+        email: ownerForm.email || undefined,
       })
       const pet = await api.pets.create({
         owner_id: owner.owner_id,
@@ -748,19 +750,36 @@ function DriveRecord({ pet, vets, showVetForm, onToggleVetForm, onCreateVet, onS
 }
 
 function DriveRegistrationForm({ onSubmit, onCancel }) {
-  const [owner, setOwner] = useState({ owner_name: '', contact_number: '' })
+  const [owner, setOwner] = useState({ owner_name: '', contact_number: '', email: '' })
   const [pet, setPet]     = useState({ pet_name: '', pet_type: '', pet_age: '', pet_color: '' })
+  const [wantsAccount, setWantsAccount] = useState(false)
   const updO = (k) => (e) => setOwner((p) => ({ ...p, [k]: e.target.value }))
   const updP = (k) => (e) => setPet((p) => ({ ...p, [k]: e.target.value }))
+  function toggleAccount() {
+    setWantsAccount((v) => { if (v) setOwner((p) => ({ ...p, email: '' })); return !v })
+  }
   return (
     <form className="encode-form drive-reg-form" onSubmit={(e) => { e.preventDefault(); onSubmit(owner, pet) }}>
       <p className="encode-form-wide drive-reg-section">Owner info <span>(barangay pre-filled from session)</span></p>
       <label>Full name
         <input required autoFocus value={owner.owner_name} onChange={updO('owner_name')} className="encode-input" />
       </label>
-      <label>Contact number
-        <input required value={owner.contact_number} onChange={updO('contact_number')} className="encode-input" />
+      <label>
+        <span>Contact number <span className="encode-label-hint">(optional)</span></span>
+        <input value={owner.contact_number} onChange={updO('contact_number')} className="encode-input" />
       </label>
+      <div className="encode-form-wide encode-account-toggle">
+        <span className="encode-account-toggle-label">Create online account for owner</span>
+        <button type="button" className={`encode-toggle-btn${wantsAccount ? ' is-on' : ''}`} onClick={toggleAccount} aria-pressed={wantsAccount}>
+          <span className="encode-toggle-knob" />
+        </button>
+      </div>
+      {wantsAccount && (
+        <label className="encode-form-wide">
+          <span>Email <span className="encode-label-hint">(will be used to log in online)</span></span>
+          <input type="email" required value={owner.email} onChange={updO('email')} className="encode-input" placeholder="owner@example.com" />
+        </label>
+      )}
       <p className="encode-form-wide drive-reg-section">Pet info</p>
       <label>Pet name
         <input required value={pet.pet_name} onChange={updP('pet_name')} className="encode-input" />
@@ -798,13 +817,32 @@ function Step({ n, title, done, disabled, summary, children }) {
 }
 
 function OwnerForm({ barangays, onSubmit }) {
-  const [form, setForm] = useState({ owner_name: '', contact_number: '', barangay_id: '' })
+  const [form, setForm] = useState({ owner_name: '', contact_number: '', barangay_id: '', email: '' })
+  const [wantsAccount, setWantsAccount] = useState(false)
   const update = (k) => (e) => setForm((prev) => ({ ...prev, [k]: e.target.value }))
+  function toggleAccount() {
+    setWantsAccount((v) => { if (v) setForm((p) => ({ ...p, email: '' })); return !v })
+  }
   return (
     <form className="encode-form" onSubmit={(e) => { e.preventDefault(); onSubmit(form) }}>
       <label>Full name<input required value={form.owner_name} onChange={update('owner_name')} className="encode-input" /></label>
-      <label>Contact number<input required value={form.contact_number} onChange={update('contact_number')} className="encode-input" /></label>
-      <label>Barangay
+      <label>
+        <span>Contact number <span className="encode-label-hint">(optional)</span></span>
+        <input value={form.contact_number} onChange={update('contact_number')} className="encode-input" />
+      </label>
+      <div className="encode-form-wide encode-account-toggle">
+        <span className="encode-account-toggle-label">Create online account for owner</span>
+        <button type="button" className={`encode-toggle-btn${wantsAccount ? ' is-on' : ''}`} onClick={toggleAccount} aria-pressed={wantsAccount}>
+          <span className="encode-toggle-knob" />
+        </button>
+      </div>
+      {wantsAccount && (
+        <label className="encode-form-wide">
+          <span>Email <span className="encode-label-hint">(will be used to log in online)</span></span>
+          <input type="email" required value={form.email} onChange={update('email')} className="encode-input" placeholder="owner@example.com" autoFocus />
+        </label>
+      )}
+      <label className="encode-form-wide">Barangay
         <select required value={form.barangay_id} onChange={update('barangay_id')} className="encode-input">
           <option value="">— select —</option>
           {barangays.map((b) => <option key={b.barangay_id} value={b.barangay_id}>{b.barangay_name}</option>)}
