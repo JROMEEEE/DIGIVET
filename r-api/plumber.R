@@ -139,14 +139,16 @@ function(req, res) {
     sil_obj         <- silhouette(km$cluster, dist(features))
     silhouette_score <- round(mean(sil_obj[, 3]), 2)
 
-    # Label clusters by mean coverage (lowest = HIGH RISK, highest = HEALTHY)
-    means  <- tapply(df$coverage_rate, df$cluster, mean)
-    ranked <- order(means)              # index 1 = lowest coverage
-    labels <- character(3)
-    labels[ranked[1]] <- "HIGH RISK"
-    labels[ranked[2]] <- "MODERATE RISK"
-    labels[ranked[3]] <- "HEALTHY"
-    df$cluster_label <- labels[df$cluster]
+    # Derive coverage thresholds from cluster means, then label each barangay
+    # by its own coverage_rate — prevents a 100%-coverage barangay from being
+    # mislabelled MODERATE just because K-means grouped it with low-pet peers.
+    means        <- tapply(df$coverage_rate, df$cluster, mean)
+    means_sorted <- sort(means)
+    thresh_low   <- (means_sorted[1] + means_sorted[2]) / 2
+    thresh_high  <- (means_sorted[2] + means_sorted[3]) / 2
+    df$cluster_label <- ifelse(df$coverage_rate <= thresh_low,  "HIGH RISK",
+                        ifelse(df$coverage_rate <= thresh_high, "MODERATE RISK",
+                                                                "HEALTHY"))
 
     # Compute coverage thresholds per cluster
     summary_df <- do.call(rbind, lapply(c("HIGH RISK", "MODERATE RISK", "HEALTHY"), function(lbl) {

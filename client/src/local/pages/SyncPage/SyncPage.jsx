@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../../shared/AuthContext'
 import { api } from '../../api'
 import './SyncPage.css'
@@ -37,14 +37,34 @@ export default function SyncPage() {
   const [phase, setPhase]           = useState('idle')
   const [syncResults, setSyncResults] = useState(null)
   const [syncError, setSyncError]     = useState(null)
-  const [tableModal, setTableModal]   = useState(null) // table name
+  const [tableModal, setTableModal]   = useState(null)
   const [showLog, setShowLog]         = useState(false)
+  const [showCompare, setShowCompare] = useState(false)
+  const [mirror, setMirror]           = useState(null)   // mirror-status result
+  const [mirrorLoading, setMirrorLoading] = useState(false)
+  const mirrorTimer = useRef(null)
 
   useEffect(() => {
     api.sync.status()
       .then((d) => { setStatus(d); setLoading(false) })
       .catch(() => setLoading(false))
   }, [])
+
+  // Poll mirror status every 30 s when Supabase is connected
+  const checkMirror = useCallback(() => {
+    if (mirrorLoading) return
+    setMirrorLoading(true)
+    api.sync.mirrorStatus()
+      .then((d) => { setMirror(d); setMirrorLoading(false) })
+      .catch(() => setMirrorLoading(false))
+  }, [mirrorLoading])
+
+  useEffect(() => {
+    if (!status?.connected) return
+    checkMirror()
+    mirrorTimer.current = setInterval(checkMirror, 30000)
+    return () => clearInterval(mirrorTimer.current)
+  }, [status?.connected]) // eslint-disable-line
 
   function handleSyncDone(results) {
     setSyncResults(results)
@@ -64,10 +84,18 @@ export default function SyncPage() {
           <p className="sync-sub">Push all local records to the online database.</p>
         </div>
         {!loading && phase === 'idle' && (
-          <button type="button" className="btn btn-primary sync-start-btn"
-            onClick={() => setPhase('auth')}>
-            Push to Supabase
-          </button>
+          <div className="sync-header-actions">
+            {status?.connected && (
+              <button type="button" className="btn btn-outline sync-start-btn"
+                onClick={() => setShowCompare(true)}>
+                Compare
+              </button>
+            )}
+            <button type="button" className="btn btn-primary sync-start-btn"
+              onClick={() => setPhase('auth')}>
+              Push to Supabase
+            </button>
+          </div>
         )}
       </div>
 
@@ -87,6 +115,62 @@ export default function SyncPage() {
           </span>
         </div>
       </div>
+
+      {/* Mirror status */}
+      {status?.connected && (
+        <div className={`mirror-card ${
+          mirrorLoading && !mirror ? 'mirror-card--loading'
+          : mirror?.mirrored        ? 'mirror-card--ok'
+          :                           'mirror-card--diff'
+        }`}>
+          <div className="mirror-card-head">
+            <span className={`mirror-dot ${mirror?.mirrored ? 'mirror-dot--ok' : 'mirror-dot--diff'}`} />
+            <div className="mirror-card-info">
+              <span className="mirror-card-title">
+                {!mirror && mirrorLoading ? 'Checking Supabase…'
+                  : mirror?.mirrored ? 'Local DB mirrors Supabase'
+                  : `Supabase has ${mirror?.total_diffs} table${mirror?.total_diffs !== 1 ? 's' : ''} with changes`}
+              </span>
+              <span className="mirror-card-sub">
+                {mirror?.checked_at ? `Last checked ${timeAgo(mirror.checked_at)} · auto-refreshes every 30 s` : 'Polling Supabase for changes…'}
+              </span>
+            </div>
+            <div className="mirror-card-actions">
+              <button type="button" className="mirror-refresh-btn" onClick={checkMirror} disabled={mirrorLoading} title="Check now">
+                {mirrorLoading ? '…' : '↻'}
+              </button>
+              {mirror && !mirror.mirrored && (
+                <button type="button" className="btn btn-primary mirror-pull-btn"
+                  onClick={() => setPhase('pull-confirm')}>
+                  Pull Changes
+                </button>
+              )}
+            </div>
+          </div>
+
+          {mirror && !mirror.mirrored && (
+            <ul className="mirror-table-list">
+              {mirror.tables.filter(t => !t.in_sync && !t.error).map(t => (
+                <li key={t.name} className="mirror-table-row">
+                  <span className="mirror-table-name">{TABLE_LABELS[t.name] ?? t.name}</span>
+                  <span className="mirror-table-detail">
+                    {t.count_diff && (
+                      <span className="mirror-badge mirror-badge--count">
+                        Local {t.local_count} · Supabase {t.supabase_count}
+                      </span>
+                    )}
+                    {t.newer_in_supabase && (
+                      <span className="mirror-badge mirror-badge--newer">
+                        Supabase has newer data
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Table grid */}
       <section className="sync-section">
@@ -140,7 +224,9 @@ export default function SyncPage() {
       {/* Results after sync */}
       {phase === 'done' && syncResults && (
         <section className="sync-section">
-          <h3 className="sync-section-title">Sync results</h3>
+          <h3 className="sync-section-title">
+            {syncResults.direction === 'pull' ? 'Pull results' : 'Sync results'}
+          </h3>
           <div className="sync-results">
             {syncResults.results.map((r) => (
               <div key={r.table} className={`sync-result-row sync-result-row--${r.status}`}>
@@ -148,13 +234,20 @@ export default function SyncPage() {
                   {r.status === 'ok' ? '✓' : r.status === 'empty' ? '—' : '✗'}
                 </span>
                 <span className="srr-table">{TABLE_LABELS[r.table] ?? r.table}</span>
-                <span className="srr-count">{r.status === 'ok' ? `${r.synced} synced` : r.status}</span>
+                <span className="srr-count">
+                  {r.status === 'ok'
+                    ? syncResults.direction === 'pull'
+                      ? `${r.upserted} updated${r.deleted > 0 ? `, ${r.deleted} removed` : ''}`
+                      : `${r.synced} synced`
+                    : r.status}
+                </span>
                 {r.error && <span className="srr-error">{r.error}</span>}
               </div>
             ))}
           </div>
           <p className="sync-total">
-            ✓ <strong>{syncResults.total_synced.toLocaleString()}</strong> records pushed to Supabase
+            ✓ <strong>{(syncResults.total_synced ?? syncResults.total_pulled ?? 0).toLocaleString()}</strong>{' '}
+            records {syncResults.direction === 'pull' ? 'pulled from Supabase' : 'pushed to Supabase'}
           </p>
           <button type="button" className="btn btn-outline" onClick={() => { setPhase('idle'); setSyncResults(null) }}>
             Done
@@ -171,6 +264,16 @@ export default function SyncPage() {
       )}
 
       {showLog && <GeneralLogModal onClose={() => setShowLog(false)} />}
+
+      {showCompare && (
+        <CompareModal
+          onClose={() => setShowCompare(false)}
+          onPull={() => {
+            setShowCompare(false)
+            setPhase('pull-confirm')
+          }}
+        />
+      )}
 
       {/* Auth modal */}
       {phase === 'auth' && (
@@ -209,7 +312,234 @@ export default function SyncPage() {
           </div>
         </div>
       )}
+
+      {/* Pull confirmation */}
+      {phase === 'pull-confirm' && (
+        <div className="modal-backdrop" onClick={() => setPhase('idle')}>
+          <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Pull from Supabase</h3>
+            <p style={{ margin: '12px 0 20px', fontSize: '0.9rem', color: 'var(--text-muted)', lineHeight: 1.6 }}>
+              This will overwrite local records with Supabase data and remove any
+              local records that no longer exist in Supabase.
+            </p>
+            <div className="encode-form-actions">
+              <button type="button" className="btn btn-outline" onClick={() => setPhase('idle')}>Cancel</button>
+              <button type="button" className="btn btn-primary" onClick={async () => {
+                setSyncResults(null)
+                setSyncError(null)
+                setPhase('pulling')
+                try {
+                  const result = await api.sync.pull()
+                  setSyncResults(result)
+                  setPhase('pull-done')
+                  api.sync.status().then(setStatus).catch(() => {})
+                  api.sync.mirrorStatus().then(setMirror).catch(() => {})
+                } catch (err) {
+                  setSyncError(err.detail ?? err.message ?? 'Pull failed — check server logs.')
+                  setPhase('pull-done')
+                }
+              }}>
+                Confirm Pull
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pulling overlay */}
+      {phase === 'pulling' && (
+        <div className="sync-overlay">
+          <div className="sync-overlay-card">
+            <div className="sync-spinner" aria-hidden="true" />
+            <p>Pulling records from Supabase…</p>
+            <p className="sync-hint">Do not close this window.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Pull results */}
+      {phase === 'pull-done' && (
+        <section className="sync-section">
+          <h3 className="sync-section-title">Pull results</h3>
+          {syncError ? (
+            <div className="pull-result-error">
+              <span className="pull-result-error-icon">✗</span>
+              <div>
+                <p className="pull-result-error-title">Pull failed</p>
+                <p className="pull-result-error-msg">{syncError}</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="sync-results">
+                {(syncResults?.results ?? []).map((r) => (
+                  <div key={r.table} className={`sync-result-row sync-result-row--${r.status}`}>
+                    <span className="srr-icon">{r.status === 'ok' ? '✓' : '✗'}</span>
+                    <span className="srr-table">{TABLE_LABELS[r.table] ?? r.table}</span>
+                    <span className="srr-count">
+                      {r.upserted} synced{r.deleted > 0 ? `, ${r.deleted} removed` : ''}
+                      {r.errors?.length > 0 && ` · ${r.errors.length} skipped`}
+                    </span>
+                    {r.errors?.map((e, i) => (
+                      <span key={i} className="srr-error">{e}</span>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <p className="sync-total">
+                ✓ <strong>{syncResults?.total_pulled ?? 0}</strong> records pulled from Supabase
+              </p>
+              <p className="sync-hint" style={{ marginTop: 4 }}>
+                Refresh any open pages to see the updated data.
+              </p>
+            </>
+          )}
+          <button type="button" className="btn btn-outline" style={{ marginTop: 8 }}
+            onClick={() => { setPhase('idle'); setSyncResults(null); setSyncError(null) }}>
+            Done
+          </button>
+        </section>
+      )}
     </main>
+  )
+}
+
+/* ── Compare modal ──────────────────────────────────────────────── */
+function CompareModal({ onClose, onPull }) {
+  const [data, setData]       = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
+  const [expanded, setExpanded] = useState({})
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  useEffect(() => {
+    api.sync.compare()
+      .then((d) => { setData(d); setLoading(false) })
+      .catch((e) => { setError(e.message); setLoading(false) })
+  }, [])
+
+  const toggle = (tbl) => setExpanded((p) => ({ ...p, [tbl]: !p[tbl] }))
+
+  const hasDiffs = data && data.total_diffs > 0
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal modal--lg" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <h3 className="modal-title">Local ↔ Supabase Comparison</h3>
+            <span className="spm-subtitle">
+              {loading ? 'Checking…' : error ? 'Error' : hasDiffs
+                ? `${data.total_diffs} difference${data.total_diffs !== 1 ? 's' : ''} found`
+                : 'Both databases are in sync ✓'}
+            </span>
+          </div>
+          <button type="button" className="modal-close-btn" onClick={onClose}>×</button>
+        </div>
+
+        <div className="modal-scroll">
+          {loading ? (
+            <p className="modal-state">Comparing databases…</p>
+          ) : error ? (
+            <p className="modal-state">{error}</p>
+          ) : (
+            <div className="cmp-table-list">
+              {data.results.map((t) => (
+                <div key={t.table} className={`cmp-row${t.in_sync ? ' cmp-row--ok' : ' cmp-row--diff'}`}>
+                  <button type="button" className="cmp-row-head" onClick={() => toggle(t.table)}>
+                    <span className={`cmp-status-dot ${t.in_sync ? 'cmp-dot--ok' : 'cmp-dot--diff'}`} />
+                    <span className="cmp-tbl-name">{TABLE_LABELS[t.table] ?? t.table}</span>
+                    <span className="cmp-counts">
+                      <span className="cmp-count-pill">Local: {t.local_count}</span>
+                      <span className="cmp-count-pill">Supabase: {t.supabase_count}</span>
+                    </span>
+                    {!t.in_sync && (
+                      <span className="cmp-diff-badge">
+                        {(t.local_only?.length ?? 0) + (t.supabase_only?.length ?? 0) + (t.diverged?.length ?? 0)} diff
+                      </span>
+                    )}
+                    <span className="cmp-chevron">{expanded[t.table] ? '▲' : '▼'}</span>
+                  </button>
+
+                  {expanded[t.table] && (
+                    <div className="cmp-detail">
+                      {t.in_sync ? (
+                        <p className="cmp-detail-ok">✓ In sync</p>
+                      ) : (
+                        <>
+                          {t.supabase_only?.length > 0 && (
+                            <div className="cmp-diff-group">
+                              <span className="cmp-diff-head cmp-diff-head--sb">
+                                ↓ Only in Supabase ({t.supabase_only.length}) — will be pulled
+                              </span>
+                              <ul className="cmp-diff-list">
+                                {t.supabase_only.map((r, i) => (
+                                  <li key={i}><span className="cmp-dot-sb">●</span> {r.label ?? `#${r.pk_val}`} <span className="cmp-time">{timeAgo(r.updated_at)}</span></li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {t.local_only?.length > 0 && (
+                            <div className="cmp-diff-group">
+                              <span className="cmp-diff-head cmp-diff-head--local">
+                                ↑ Only in Local ({t.local_only.length}) — push to sync
+                              </span>
+                              <ul className="cmp-diff-list">
+                                {t.local_only.map((r, i) => (
+                                  <li key={i}><span className="cmp-dot-local">●</span> {r.label ?? `#${r.pk_val}`} <span className="cmp-time">{timeAgo(r.updated_at)}</span></li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {t.diverged?.length > 0 && (
+                            <div className="cmp-diff-group">
+                              <span className="cmp-diff-head cmp-diff-head--div">
+                                ⚡ Diverged ({t.diverged.length}) — same record, different data
+                              </span>
+                              <ul className="cmp-diff-list">
+                                {t.diverged.map((r, i) => (
+                                  <li key={i}>
+                                    <span className="cmp-dot-div">●</span>
+                                    {r.label ?? `#${r.pk_val}`}
+                                    <span className={`cmp-newer-badge ${r.newer === 'supabase' ? 'cmp-newer--sb' : 'cmp-newer--local'}`}>
+                                      {r.newer === 'supabase' ? 'Supabase newer' : 'Local newer'}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {!loading && !error && hasDiffs && (
+          <div className="modal-footer">
+            <p className="cmp-footer-hint">Pull to apply Supabase changes to local, or Push to overwrite Supabase with local data.</p>
+            <div className="cmp-footer-actions">
+              <button type="button" className="btn btn-outline" onClick={onClose}>Close</button>
+              <button type="button" className="btn btn-primary" onClick={onPull}>Pull from Supabase</button>
+            </div>
+          </div>
+        )}
+        {!loading && !error && !hasDiffs && (
+          <div className="modal-footer">
+            <button type="button" className="btn btn-outline" onClick={onClose}>Close</button>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 

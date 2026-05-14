@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:5001/api';
+const API_BASE = import.meta.env.VITE_API_BASE ?? '/api';
 
 function getToken() {
   try { return localStorage.getItem('digivet_token') ?? undefined }
@@ -47,7 +47,10 @@ export const api = {
     status:       ()      => request('/sync/status'),
     pending:      (table) => request(`/sync/pending/${encodeURIComponent(table)}`),
     log:          ()      => request('/sync/log'),
-    push:         ()      => request('/sync/push', { method: 'POST' }),
+    push:         ()      => request('/sync/push',    { method: 'POST' }),
+    mirrorStatus: ()      => request('/sync/mirror-status'),
+    compare:      ()      => request('/sync/compare'),
+    pull:         ()      => request('/sync/pull',    { method: 'POST' }),
   },
   analytics: {
     ping:             () => request('/analytics/ping'),

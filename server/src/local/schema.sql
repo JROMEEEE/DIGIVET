@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS sync_log (
   status           TEXT        DEFAULT 'never'  -- never | ok | partial | error
 );
 ALTER TABLE sync_log ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ;
+ALTER TABLE sync_log ADD COLUMN IF NOT EXISTS last_pull_at    TIMESTAMPTZ;
 
 -- ── Auto-update trigger function (shared by all tables) ───────────
 CREATE OR REPLACE FUNCTION set_updated_at()

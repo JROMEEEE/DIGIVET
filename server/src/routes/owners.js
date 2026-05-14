@@ -13,7 +13,8 @@ function generatePassword(len = 10) {
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
+router.get('/', async (req, res, next) => {
+  try {
   const q = (req.query.q ?? '').trim();
   const limit = Math.min(Number(req.query.limit) || 20, 100);
 
@@ -46,19 +47,22 @@ router.get('/', async (req, res) => {
     [like, limit],
   );
   res.json(rows);
+  } catch (err) { next(err); }
 });
 
-router.get('/:id', async (req, res) => {
-  const { rows } = await query(
-    `SELECT o.owner_id, o.owner_name, o.contact_number,
-            o.email, o.barangay_id, b.barangay_name
-     FROM owner_table o
-     LEFT JOIN barangay_table b ON b.barangay_id = o.barangay_id
-     WHERE o.owner_id = $1 AND o.deleted_at IS NULL`,
-    [req.params.id],
-  );
-  if (!rows[0]) return res.status(404).json({ error: 'Owner not found' });
-  res.json(rows[0]);
+router.get('/:id', async (req, res, next) => {
+  try {
+    const { rows } = await query(
+      `SELECT o.owner_id, o.owner_name, o.contact_number,
+              o.email, o.barangay_id, b.barangay_name
+       FROM owner_table o
+       LEFT JOIN barangay_table b ON b.barangay_id = o.barangay_id
+       WHERE o.owner_id = $1 AND o.deleted_at IS NULL`,
+      [req.params.id],
+    );
+    if (!rows[0]) return res.status(404).json({ error: 'Owner not found' });
+    res.json(rows[0]);
+  } catch (err) { next(err); }
 });
 
 router.post('/', async (req, res, next) => {
@@ -66,10 +70,34 @@ router.post('/', async (req, res, next) => {
   try {
     const { owner_name, contact_number, barangay_id, email } = req.body ?? {};
     console.log('[owners POST] received:', { owner_name, contact_number, barangay_id, email });
-    if (!owner_name || !contact_number || !barangay_id) {
-      return res.status(400).json({
-        error: 'owner_name, contact_number, and barangay_id are required',
+    if (!owner_name || !barangay_id) {
+      return res.status(400).json({ error: 'owner_name and barangay_id are required' });
+    }
+
+    // Dedup checks before opening the transaction
+    const dupName = await query(
+      `SELECT owner_id, owner_name FROM owner_table WHERE owner_name = $1 AND deleted_at IS NULL`,
+      [owner_name],
+    );
+    if (dupName.rows.length > 0) {
+      return res.status(409).json({
+        error: 'An owner with this name already exists',
+        existing_owner_id: dupName.rows[0].owner_id,
+        existing_owner_name: dupName.rows[0].owner_name,
       });
+    }
+    if (email) {
+      const dupEmail = await query(
+        `SELECT owner_id, owner_name FROM owner_table WHERE email = $1 AND deleted_at IS NULL`,
+        [email],
+      );
+      if (dupEmail.rows.length > 0) {
+        return res.status(409).json({
+          error: 'An owner with this email already exists',
+          existing_owner_id: dupEmail.rows[0].owner_id,
+          existing_owner_name: dupEmail.rows[0].owner_name,
+        });
+      }
     }
 
     await client.query('BEGIN');
@@ -139,72 +167,11 @@ router.post('/', async (req, res, next) => {
   } finally {
     client.release();
   }
-  try {
-    const { owner_name, barangay_id, email, contact_number } = req.body ?? {};
-    if (!owner_name || !barangay_id) {
-      return res.status(400).json({ error: 'owner_name and barangay_id are required' });
-    }
-
-    // Deduplication — reject if name already belongs to an active owner
-    const dupName = await query(
-      `SELECT owner_id, owner_name FROM owner_table
-       WHERE owner_name = $1 AND deleted_at IS NULL`,
-      [owner_name],
-    );
-    if (dupName.rows.length > 0) {
-      return res.status(409).json({
-        error: 'An owner with this name already exists',
-        existing_owner_id: dupName.rows[0].owner_id,
-        existing_owner_name: dupName.rows[0].owner_name,
-      });
-    }
-
-    // Deduplication — reject if email already belongs to an active owner
-    if (email) {
-      const dupEmail = await query(
-        `SELECT owner_id, owner_name FROM owner_table
-         WHERE email = $1 AND deleted_at IS NULL`,
-        [email],
-      );
-      if (dupEmail.rows.length > 0) {
-        return res.status(409).json({
-          error: 'An owner with this email already exists',
-          existing_owner_id: dupEmail.rows[0].owner_id,
-          existing_owner_name: dupEmail.rows[0].owner_name,
-        });
-      }
-    }
-
-    const { rows } = await query(
-      `INSERT INTO owner_table (owner_name, contact_number, barangay_id, email)
-       VALUES ($1, $2, $3, $4)
-       RETURNING owner_id, owner_name, contact_number, barangay_id, email`,
-      [owner_name, contact_number ?? '', Number(barangay_id), email ?? null],
-    );
-    const owner = rows[0];
-
-    // Auto-create user_profile for the owner so they can log in later.
-    // display_name must match owner_name; role is OWNER.
-    if (email) {
-      await query(
-        `INSERT INTO user_profile (display_name, role, local_email, owner_id)
-         VALUES ($1, 'OWNER', $2, $3)
-         ON CONFLICT (local_email) DO UPDATE
-           SET display_name = $1, owner_id = $3`,
-        [owner_name, email, owner.owner_id],
-      ).catch((e) => console.warn('[owners] user_profile creation skipped:', e.message));
-    }
-
-    syncRecord('owner_table', 'owner_id', owner.owner_id);
-    res.status(201).json(owner);
-  } catch (err) { next(err); }
 });
 
 router.put('/:id', async (req, res, next) => {
   try {
     const { owner_name, contact_number, barangay_id, email } = req.body ?? {};
-    if (!owner_name || !contact_number || !barangay_id) {
-      return res.status(400).json({ error: 'owner_name, contact_number, and barangay_id are required' });
     if (!owner_name || !barangay_id) {
       return res.status(400).json({ error: 'owner_name and barangay_id are required' });
     }
@@ -234,7 +201,6 @@ router.put('/:id', async (req, res, next) => {
        SET owner_name = $1, contact_number = $2, barangay_id = $3, email = $4
        WHERE owner_id = $5 AND deleted_at IS NULL
        RETURNING owner_id, owner_name, contact_number, barangay_id, email`,
-      [owner_name, contact_number, Number(barangay_id), email ?? null, req.params.id],
       [owner_name, contact_number ?? '', Number(barangay_id), email ?? null, req.params.id],
     );
     if (!rows[0]) return res.status(404).json({ error: 'Owner not found' });
