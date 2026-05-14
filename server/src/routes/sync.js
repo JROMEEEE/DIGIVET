@@ -15,6 +15,13 @@ const SYNC_TABLES = [
   { name: 'drive_session_table', pk: 'session_id',   display: 'session_date',     softDelete: false },
   { name: 'approval_id_table',   pk: 'approval_id',  display: 'approval_code',    softDelete: false },
   { name: 'vaccine_table',       pk: 'vaccine_id',   display: 'vaccine_details',  softDelete: true  },
+  // user_profile: push-only (UUID PK, excluded from pull/mirror).
+  // strip removes local-only auth columns before sending to Supabase.
+  {
+    name: 'user_profile', pk: 'id', display: 'display_name', softDelete: false,
+    strip: (row) => { const { local_password_hash, ...rest } = row; return rest; },
+    mirrorSkip: true,
+  },
 ];
 
 /* ── Pending records for a single table ──────────────────────── */
@@ -72,9 +79,9 @@ router.get('/log', requireAuth, async (req, res, next) => {
 });
 
 /* ── Internet / Supabase reachability check ──────────────────── */
-router.get('/connectivity', async (_req, res) => {
+router.get('/connectivity', requireAuth, async (_req, res) => {
   const url = process.env.SUPABASE_URL;
-  if (!url) return res.json({ online: false, reason: 'SUPABASE_URL not set' });
+  if (!url) return res.json({ online: false });
   try {
     const t0 = Date.now();
     const r  = await fetch(`${url}/rest/v1/`, {
@@ -82,8 +89,8 @@ router.get('/connectivity', async (_req, res) => {
       signal:  AbortSignal.timeout(4000),
     });
     res.json({ online: true, latency_ms: Date.now() - t0, status: r.status });
-  } catch (err) {
-    res.json({ online: false, reason: err.message });
+  } catch {
+    res.json({ online: false });
   }
 });
 
@@ -117,8 +124,12 @@ router.get('/status', requireAuth, async (req, res, next) => {
       }),
     );
 
+    // Only tell the client whether Supabase is configured — never expose the full URL
+    const rawUrl = process.env.SUPABASE_URL ?? null;
+    const maskedUrl = rawUrl ? rawUrl.replace(/https:\/\/([^.]+).*/, 'https://[project].supabase.co') : null;
+
     res.json({
-      supabase_url:  process.env.SUPABASE_URL ?? null,
+      supabase_url:  maskedUrl,
       connected:     !!supabaseAdmin,
       tables:        tableCounts,
       last_sync:     lastSync,
@@ -133,27 +144,27 @@ router.post('/push', requireAuth, async (req, res, next) => {
     return res.status(503).json({ error: 'Supabase not configured — check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env' });
   }
 
-  // Get last sync time for incremental push
-  const logResult = await query(
-    `SELECT last_sync_at FROM sync_log WHERE id = 1`,
-  ).catch(() => ({ rows: [] }));
-  const since = logResult.rows[0]?.last_sync_at ?? null;
-
   const results = [];
   let totalSynced = 0;
 
   try {
+    // Fetch cursor INSIDE try so any DB failure is caught and reported.
+    const logResult = await query(`SELECT last_sync_at FROM sync_log WHERE id = 1`).catch(() => ({ rows: [] }));
+    const since = logResult.rows[0]?.last_sync_at ?? null;
+
+    if (!since) console.warn('[sync/push] No last_sync_at — full table scan (first push or reset)');
     // ── Pass 1: upsert active records (forward order) ──────────
     const upsertResults = {};
-    for (const { name, pk, softDelete } of SYNC_TABLES) {
+    for (const { name, pk, softDelete, strip } of SYNC_TABLES) {
       const activeRows = since
         ? (await query(`SELECT * FROM ${name} WHERE updated_at > $1 ${softDelete ? 'AND deleted_at IS NULL' : ''}`, [since])).rows
         : (await query(`SELECT * FROM ${name} ${softDelete ? 'WHERE deleted_at IS NULL' : ''}`)).rows;
 
       if (activeRows.length > 0) {
+        const payload = strip ? activeRows.map(strip) : activeRows;
         const { error } = await supabaseAdmin
           .from(name)
-          .upsert(activeRows, { onConflict: pk });
+          .upsert(payload, { onConflict: pk });
         if (error) {
           results.push({ table: name, synced: 0, status: 'error', error: error.message });
           upsertResults[name] = { ok: false, count: 0 };
@@ -165,22 +176,39 @@ router.post('/push', requireAuth, async (req, res, next) => {
     }
 
     // ── Pass 2: hard-delete soft-deleted rows from Supabase ─────────
-    const deletedPetIds   = (await query(`SELECT pet_id   FROM pet_table   WHERE deleted_at IS NOT NULL`)).rows.map(r => r.pet_id);
-    const deletedOwnerIds = (await query(`SELECT owner_id FROM owner_table WHERE deleted_at IS NOT NULL`)).rows.map(r => r.owner_id);
-    const deletedVaxIds   = (await query(`SELECT vaccine_id FROM vaccine_table WHERE deleted_at IS NOT NULL`)).rows.map(r => r.vaccine_id);
+    // Scope to updated_at > last_sync so we don't re-send deletes that
+    // were already processed by a previous push.
+    const sinceFilter = since
+      ? `WHERE deleted_at IS NOT NULL AND updated_at > '${since}'`
+      : `WHERE deleted_at IS NOT NULL`;
 
-    // 1. Vaccines — delete by vaccine_id AND by pet_id of any deleted pet.
-    //    The pet_id sweep catches vaccines that exist in Supabase but whose
-    //    local soft-delete was never cascaded (e.g. after a pull).
+    const deletedPetIds   = (await query(`SELECT pet_id    FROM pet_table    ${sinceFilter}`)).rows.map(r => r.pet_id);
+    const deletedOwnerIds = (await query(`SELECT owner_id  FROM owner_table  ${sinceFilter}`)).rows.map(r => r.owner_id);
+    const deletedVaxIds   = (await query(`SELECT vaccine_id FROM vaccine_table ${sinceFilter}`)).rows.map(r => r.vaccine_id);
+
+    // Cascade order: vaccines → pets → owners
+    // Each step also sweeps by parent ID so orphaned Supabase rows can't block deletes.
+
+    // 1. Vaccines — sweep by pet_id (covers all pets/owners being deleted)
     if (deletedPetIds.length > 0) {
-      const { error } = await supabaseAdmin.from('vaccine_table').delete().in('pet_id', deletedPetIds);
-      if (error) results.push({ table: 'vaccine_table', synced: upsertResults['vaccine_table']?.count ?? 0, status: 'error', error: `delete: ${error.message}` });
+      await supabaseAdmin.from('vaccine_table').delete().in('pet_id', deletedPetIds);
+    }
+    // Also cascade vaccines for deleted owners (fetch their pets from Supabase)
+    if (deletedOwnerIds.length > 0) {
+      const { data: ownerPets } = await supabaseAdmin.from('pet_table').select('pet_id').in('owner_id', deletedOwnerIds);
+      const ownerPetIds = (ownerPets ?? []).map(r => r.pet_id);
+      if (ownerPetIds.length > 0) {
+        await supabaseAdmin.from('vaccine_table').delete().in('pet_id', ownerPetIds);
+      }
     }
     if (deletedVaxIds.length > 0) {
       await supabaseAdmin.from('vaccine_table').delete().in('vaccine_id', deletedVaxIds);
     }
 
-    // 2. Pets — safe now that their vaccines are gone
+    // 2. Pets — sweep by owner_id so Supabase-side orphan pets can't block owner deletes
+    if (deletedOwnerIds.length > 0) {
+      await supabaseAdmin.from('pet_table').delete().in('owner_id', deletedOwnerIds);
+    }
     if (deletedPetIds.length > 0) {
       const { error } = await supabaseAdmin.from('pet_table').delete().in('pet_id', deletedPetIds);
       if (error) {
@@ -190,7 +218,7 @@ router.post('/push', requireAuth, async (req, res, next) => {
       }
     }
 
-    // 3. Owners
+    // 3. Owners — safe now that their pets are gone
     if (deletedOwnerIds.length > 0) {
       const { error } = await supabaseAdmin.from('owner_table').delete().in('owner_id', deletedOwnerIds);
       if (error) {
@@ -251,7 +279,18 @@ router.get('/mirror-status', requireAuth, async (req, res, next) => {
     const tables = [];
     let totalDiffs = 0;
 
-    for (const { name, pk, softDelete } of SYNC_TABLES) {
+    // Baseline = MAX(last_sync_at, last_pull_at) so that:
+    //   • After push  → Supabase trigger bumps are within the 60 s grace window
+    //   • After pull  → the edit we just pulled is before the baseline → no false "Supabase newer"
+    const logRow = (await query('SELECT last_sync_at, last_pull_at FROM sync_log WHERE id = 1').catch(() => ({ rows: [] }))).rows[0];
+    const lastSyncAt = logRow?.last_sync_at ?? null;
+    const lastPullAt = logRow?.last_pull_at ?? null;
+    const baselineAt = (lastSyncAt && lastPullAt)
+      ? (new Date(lastSyncAt) > new Date(lastPullAt) ? lastSyncAt : lastPullAt)
+      : (lastSyncAt ?? lastPullAt ?? null);
+
+    for (const { name, pk, softDelete, mirrorSkip } of SYNC_TABLES) {
+      if (mirrorSkip) continue;
       // Local: active rows only + newest updated_at
       const localRes = await query(
         `SELECT COUNT(*)::int AS cnt, MAX(updated_at) AS newest
@@ -260,22 +299,33 @@ router.get('/mirror-status', requireAuth, async (req, res, next) => {
       const localCnt    = localRes.rows[0].cnt;
       const localNewest = localRes.rows[0].newest;
 
-      // Supabase: active rows only (mirror deleted_at filter so counts match)
-      const sbQuery = supabaseAdmin.from(name).select('*', { count: 'exact', head: true });
-      if (softDelete) sbQuery.is('deleted_at', null);
-      const { count: sbCount, error: countErr } = await sbQuery;
-      if (countErr) { tables.push({ name, error: countErr.message }); continue; }
+      // Supabase: single query for count + newest (halves API calls vs two separate queries)
+      const sbQ = supabaseAdmin
+        .from(name)
+        .select('updated_at', { count: 'exact' })
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      if (softDelete) sbQ.is('deleted_at', null);
+      const { data: sbData, count: sbCount, error: sbErr } = await sbQ;
+      if (sbErr) { tables.push({ name, error: sbErr.message }); continue; }
 
-      const newestQuery = supabaseAdmin.from(name).select(`updated_at`).order('updated_at', { ascending: false }).limit(1);
-      if (softDelete) newestQuery.is('deleted_at', null);
-      const { data: newestData, error: newestErr } = await newestQuery;
-      if (newestErr) { tables.push({ name, error: newestErr.message }); continue; }
+      const sbNewest  = sbData?.[0]?.updated_at ?? null;
+      // Only flag count_diff when Supabase has MORE rows than local.
+      // Local having more means there are pending pushes — the push counter handles that.
+      const countDiff = (sbCount ?? 0) > localCnt;
 
-      const sbNewest  = newestData?.[0]?.updated_at ?? null;
-      const countDiff = (sbCount ?? 0) !== localCnt;
-      const newerInSb = sbNewest && localNewest
-        ? new Date(sbNewest) > new Date(localNewest)
-        : (sbNewest && !localNewest);
+      // "Supabase has newer data" = Supabase has a row updated AFTER the baseline + 60 s.
+      // The 60 s grace period absorbs Supabase's own set_updated_at() trigger firing
+      // on our push, and the baseline shifts to last_pull_at after a pull so just-pulled
+      // edits don't keep showing as "newer".
+      const baseline = baselineAt
+        ? new Date(new Date(baselineAt).getTime() + 60_000).toISOString()
+        : null;
+      const newerInSb = sbNewest
+        ? baseline
+          ? new Date(sbNewest) > new Date(baseline)
+          : true
+        : false;
 
       const hasChanges = countDiff || newerInSb;
       if (hasChanges) totalDiffs++;
@@ -381,13 +431,14 @@ router.post('/pull', requireAuth, async (req, res, next) => {
 
   const results   = [];
   let totalPulled = 0;
+  const client    = await pool.connect();
 
   try {
     // Pre-load local column names per table so we never reference a column
     // that exists in Supabase but not locally (e.g. pending_password).
     const localCols = {};
     for (const { name } of SYNC_TABLES) {
-      const { rows } = await query(
+      const { rows } = await client.query(
         `SELECT column_name FROM information_schema.columns
          WHERE table_schema = 'public' AND table_name = $1`,
         [name],
@@ -395,7 +446,18 @@ router.post('/pull', requireAuth, async (req, res, next) => {
       localCols[name] = new Set(rows.map((r) => r.column_name));
     }
 
-    for (const { name, pk, softDelete } of SYNC_TABLES) {
+    // Wrap all upserts in one transaction with app.pulling = 'true' so the
+    // set_updated_at() trigger skips bumping updated_at for pulled rows.
+    // This preserves Supabase's original timestamps so nothing shows as
+    // pending-push after the pull.
+    await client.query('BEGIN');
+    await client.query("SET LOCAL app.pulling = 'true'");
+
+    // user_profile uses UUID PK — the ::int[] casts in the pull deletion logic
+    // would fail, so exclude it from pull. It syncs via syncRecord() on write.
+    const PULL_TABLES = SYNC_TABLES.filter((t) => t.name !== 'user_profile');
+
+    for (const { name, pk, softDelete } of PULL_TABLES) {
       // Fetch full rows from Supabase
       const { data: sbRows, error } = await supabaseAdmin.from(name).select('*');
       if (error) {
@@ -421,7 +483,7 @@ router.post('/pull', requireAuth, async (req, res, next) => {
         const sets    = allCols.filter((c) => c !== pk).map((c) => `${c} = EXCLUDED.${c}`).join(', ');
 
         try {
-          await query(
+          await client.query(
             `INSERT INTO ${name} (${allCols.join(', ')})
              VALUES (${holders})
              ON CONFLICT (${pk}) DO UPDATE SET ${sets}`,
@@ -429,26 +491,34 @@ router.post('/pull', requireAuth, async (req, res, next) => {
           );
           upserted++;
         } catch (rowErr) {
-          rowErrors.push(`#${row[pk]}: ${rowErr.message}`);
+          // FK / unique violations are structural — log and skip the row.
+          // Other errors (connection, timeout) bubble up and abort the transaction.
+          const isConstraintErr = ['23000','23001','23502','23503','23505','23514'].includes(rowErr.code);
+          if (isConstraintErr) {
+            rowErrors.push(`#${row[pk]}: ${rowErr.message}`);
+            // Savepoint so the transaction stays valid after a constraint error
+            await client.query('SAVEPOINT sp_row').catch(() => {});
+          } else {
+            throw rowErr;
+          }
         }
       }
 
       // ── Remove rows that no longer exist in Supabase ──────────
       if (softDelete) {
-        const { rows: activeLocal } = await query(
+        const { rows: activeLocal } = await client.query(
           `SELECT ${pk} FROM ${name} WHERE deleted_at IS NULL`,
         );
         const onlyLocal = activeLocal.map((r) => String(r[pk])).filter((v) => !sbPKs.has(v));
         if (onlyLocal.length > 0) {
-          // Cascade: if removing pets, also soft-delete their vaccines
           if (name === 'pet_table') {
-            await query(
+            await client.query(
               `UPDATE vaccine_table SET deleted_at = NOW()
                WHERE pet_id = ANY($1::int[]) AND deleted_at IS NULL`,
               [onlyLocal],
             );
           }
-          await query(
+          await client.query(
             `UPDATE ${name} SET deleted_at = NOW()
              WHERE ${pk} = ANY($1::int[]) AND deleted_at IS NULL`,
             [onlyLocal],
@@ -456,10 +526,10 @@ router.post('/pull', requireAuth, async (req, res, next) => {
           deleted = onlyLocal.length;
         }
       } else {
-        const { rows: allLocal } = await query(`SELECT ${pk} FROM ${name}`);
+        const { rows: allLocal } = await client.query(`SELECT ${pk} FROM ${name}`);
         const onlyLocal = allLocal.map((r) => String(r[pk])).filter((v) => !sbPKs.has(v));
         if (onlyLocal.length > 0) {
-          await query(`DELETE FROM ${name} WHERE ${pk} = ANY($1::int[])`, [onlyLocal]);
+          await client.query(`DELETE FROM ${name} WHERE ${pk} = ANY($1::int[])`, [onlyLocal]);
           deleted = onlyLocal.length;
         }
       }
@@ -474,16 +544,23 @@ router.post('/pull', requireAuth, async (req, res, next) => {
       });
     }
 
-    // Advance last_sync_at so trigger-bumped updated_at values don't show as pending
+    await client.query('COMMIT');
+
+    // Only advance last_pull_at — never touch last_sync_at here.
+    // last_sync_at is a push-only cursor; advancing it during a pull would
+    // hide locally pending records from the push counter.
     await query(
-      `INSERT INTO sync_log (id, last_sync_at, last_pull_at, status)
-       VALUES (1, NOW(), NOW(), 'ok')
-       ON CONFLICT (id) DO UPDATE SET
-         last_sync_at = NOW(), last_pull_at = NOW(), status = 'ok'`,
+      `INSERT INTO sync_log (id, last_pull_at) VALUES (1, NOW())
+       ON CONFLICT (id) DO UPDATE SET last_pull_at = NOW()`,
     );
 
     res.json({ status: 'ok', results, total_pulled: totalPulled });
-  } catch (err) { next(err); }
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    next(err);
+  } finally {
+    client.release();
+  }
 });
 
 export default router;

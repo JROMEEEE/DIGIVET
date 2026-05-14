@@ -1,6 +1,10 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET ?? 'digivet-dev-secret-change-in-prod';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+  console.error('[security] JWT_SECRET is not set in .env — refusing to start with an insecure secret.');
+  process.exit(1);
+}
 
 export function requireAuth(req, res, next) {
   const auth = req.headers.authorization;

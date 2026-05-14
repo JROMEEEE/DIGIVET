@@ -91,8 +91,9 @@ CREATE TABLE IF NOT EXISTS user_profile (
 );
 
 -- Columns present in collaborator schema (idempotent).
-ALTER TABLE owner_table  ADD COLUMN IF NOT EXISTS email    VARCHAR(255);
-ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS owner_id INT;
+ALTER TABLE owner_table  ADD COLUMN IF NOT EXISTS email            VARCHAR(255);
+ALTER TABLE owner_table  ADD COLUMN IF NOT EXISTS pending_password VARCHAR(255);
+ALTER TABLE user_profile ADD COLUMN IF NOT EXISTS owner_id         INT;
 
 -- contact_number becomes optional so email can be the primary identifier.
 ALTER TABLE owner_table ALTER COLUMN contact_number DROP NOT NULL;
@@ -144,9 +145,14 @@ ALTER TABLE sync_log ADD COLUMN IF NOT EXISTS last_attempt_at TIMESTAMPTZ;
 ALTER TABLE sync_log ADD COLUMN IF NOT EXISTS last_pull_at    TIMESTAMPTZ;
 
 -- ── Auto-update trigger function (shared by all tables) ───────────
+-- Skip the timestamp bump when the pull route sets app.pulling = 'true'
+-- so pulled rows keep their original Supabase updated_at value.
 CREATE OR REPLACE FUNCTION set_updated_at()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
 BEGIN
+  IF current_setting('app.pulling', true) = 'true' THEN
+    RETURN NEW;
+  END IF;
   NEW.updated_at = NOW();
   RETURN NEW;
 END;

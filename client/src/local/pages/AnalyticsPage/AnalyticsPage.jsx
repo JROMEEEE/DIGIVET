@@ -7,30 +7,33 @@ export default function AnalyticsPage() {
 
   return (
     <main className="analytics">
-      <div className="analytics-header">
-        <h2>Analytics</h2>
-        <p>Vaccination coverage insights powered by R.</p>
-      </div>
 
+      {/* ── Page header ────────────────────────────────────── */}
+      <header className="analytics-page-header">
+        <div>
+          <h1 className="analytics-page-title">Analytics</h1>
+          <p className="analytics-page-sub">Vaccination coverage insights powered by R and local data.</p>
+        </div>
+      </header>
+
+      {/* ── R Engine status ─────────────────────────────────── */}
       <REnginePanel />
 
-      <div className="analytics-grid">
-        {/* Row 1 — full width */}
-        <BarangayCoverageChart onViewAll={() => setShowCoverageModal(true)} />
+      {/* ── Full-width: Barangay coverage bar chart ──────────── */}
+      <div className="an-section-label">Vaccination Coverage</div>
+      <BarangayCoverageChart onViewAll={() => setShowCoverageModal(true)} />
 
-        {/* Row 2 — side by side */}
+      {/* ── 3-column row ─────────────────────────────────────── */}
+      <div className="an-section-label">Activity Breakdown</div>
+      <div className="analytics-row3">
         <MonthlyTrendsChart />
         <PetTypeBreakdown />
-
-        {/* Row 3 — full width */}
-        <ClusteringAnalytics />
-
-        {/* Row 4 — full width placeholder */}
-        <div className="analytics-placeholder analytics-placeholder--wide">
-          <span className="analytics-placeholder-icon" aria-hidden="true">👨‍⚕️</span>
-          <span className="analytics-placeholder-label">Top vets by records</span>
-        </div>
+        <TopVetsChart />
       </div>
+
+      {/* ── Full-width: Clustering ───────────────────────────── */}
+      <div className="an-section-label">Barangay Risk Classification</div>
+      <ClusteringAnalytics />
 
       {showCoverageModal && (
         <BarangayCoverageModal onClose={() => setShowCoverageModal(false)} />
@@ -83,19 +86,19 @@ function ClusteringAnalytics() {
 
   return (
     <div
-      className="analytics-placeholder analytics-placeholder--wide analytics-chart-card cluster-card"
+      className="an-card an-card--wide cluster-card"
       onClick={() => !loading && !offline && setShowAllBarangays(true)}
       style={{ cursor: !loading && !offline ? 'pointer' : 'default' }}
     >
-      <div className="chart-header">
+      <div className="an-card-head">
         <div>
-          <span className="chart-title">Barangay Risk Classification</span>
-          <span className="chart-sub">K-Means clustering (k=3) · click card to view all barangays</span>
+          <span className="an-card-title">Barangay Risk Classification</span>
+          <span className="an-card-sub">K-Means clustering (k=3) · click card to view all barangays</span>
         </div>
         {!loading && !offline && (
           <button
             type="button"
-            className="chart-view-btn"
+            className="an-view-btn"
             onClick={(e) => { e.stopPropagation(); setShowAllBarangays(true) }}
           >
             All barangays →
@@ -104,13 +107,13 @@ function ClusteringAnalytics() {
       </div>
 
       {loading ? (
-        <p className="chart-state">Running clustering in R…</p>
+        <p className="an-state">Running clustering in R…</p>
       ) : offline ? (
-        <p className="chart-state chart-state--offline">R engine offline — start the API to run clustering.</p>
+        <p className="an-state an-state--err">R engine offline — start the API to run clustering.</p>
       ) : result?.status === 'insufficient_data' ? (
-        <p className="chart-state">{result.message}</p>
+        <p className="an-state">{result.message}</p>
       ) : error ? (
-        <p className="chart-state chart-state--offline">{error}</p>
+        <p className="an-state an-state--err">{error}</p>
       ) : (
         <>
           {/* Silhouette score panel */}
@@ -483,23 +486,20 @@ function PetTypeBreakdown() {
 
   return (
     <>
-      <div
-        className="analytics-placeholder analytics-chart-card"
-        style={{ cursor: data.length > 0 ? 'default' : 'default' }}
-      >
-        <div className="chart-header">
+      <div className="an-card an-card--tall">
+        <div className="an-card-head">
           <div>
-            <span className="chart-title">Pet Type Breakdown</span>
-            <span className="chart-sub">{loading ? '…' : `${total.toLocaleString()} registered pets`}</span>
+            <span className="an-card-title">Pet Type Breakdown</span>
+            <span className="an-card-sub">{loading ? '…' : `${total.toLocaleString()} registered pets`}</span>
           </div>
         </div>
 
         {loading ? (
-          <p className="chart-state">Loading from R…</p>
+          <p className="an-state">Loading from R…</p>
         ) : offline ? (
-          <p className="chart-state chart-state--offline">R engine offline — start the API to load charts.</p>
+          <p className="an-state an-state--err">R engine offline — start the API to load charts.</p>
         ) : data.length === 0 ? (
-          <p className="chart-state">No pet data yet.</p>
+          <p className="an-state">No pet data yet.</p>
         ) : (
           <div className="ptb-list">
             {data.map((d, i) => (
@@ -658,27 +658,27 @@ function BarangayCoverageChart({ onViewAll }) {
   const max = data.length ? Math.max(...data.map((d) => d.vaccination_count)) : 1
 
   return (
-    <div className="analytics-placeholder analytics-placeholder--wide analytics-chart-card">
-      <div className="chart-header">
+    <div className="an-card an-card--wide">
+      <div className="an-card-head">
         <div>
-          <span className="chart-title">Vaccination by Barangay</span>
-          <span className="chart-sub">Top 5</span>
+          <span className="an-card-title">Vaccination by Barangay</span>
+          <span className="an-card-sub">Top 5</span>
         </div>
         {!loading && !offline && data.length > 0 && (
-          <button type="button" className="chart-view-btn" onClick={onViewAll}>
+          <button type="button" className="an-view-btn" onClick={onViewAll}>
             View all →
           </button>
         )}
       </div>
 
       {loading ? (
-        <p className="chart-state">Loading from R…</p>
+        <p className="an-state">Loading from R…</p>
       ) : offline ? (
-        <p className="chart-state chart-state--offline">
+        <p className="an-state an-state--err">
           R engine offline — start the API to load charts.
         </p>
       ) : data.length === 0 ? (
-        <p className="chart-state">No data yet.</p>
+        <p className="an-state">No data yet.</p>
       ) : (
         <div className="bar-chart" onClick={onViewAll} role="button" tabIndex={0}
              title="Click to explore all barangays">
@@ -694,7 +694,7 @@ function BarangayCoverageChart({ onViewAll }) {
               <span className="bar-value">{d.vaccination_count.toLocaleString()}</span>
             </div>
           ))}
-          <p className="chart-click-hint">Click chart to explore all barangays</p>
+          <p className="an-click-hint">Click chart to explore all barangays</p>
         </div>
       )}
     </div>
@@ -843,19 +843,19 @@ function MonthlyTrendsChart() {
     <>
       {/* Card — clicking the background opens the overview */}
       <div
-        className="analytics-placeholder analytics-chart-card"
+        className="an-card an-card--tall"
         onClick={() => data.length > 0 && setShowOverview(true)}
         style={{ cursor: data.length > 0 ? 'pointer' : 'default' }}
       >
-        <div className="chart-header">
+        <div className="an-card-head">
           <div>
-            <span className="chart-title">Monthly Vaccination Trends</span>
-            <span className="chart-sub">Last 12 months · click bar for month detail</span>
+            <span className="an-card-title">Monthly Vaccination Trends</span>
+            <span className="an-card-sub">Last 12 months · click bar for month detail</span>
           </div>
           {!loading && !offline && data.length > 0 && (
             <button
               type="button"
-              className="chart-view-btn"
+              className="an-view-btn"
               onClick={(e) => { e.stopPropagation(); setShowOverview(true) }}
             >
               Overview →
@@ -864,13 +864,13 @@ function MonthlyTrendsChart() {
         </div>
 
         {loading ? (
-          <p className="chart-state">Loading from R…</p>
+          <p className="an-state">Loading from R…</p>
         ) : offline ? (
-          <p className="chart-state chart-state--offline">
+          <p className="an-state an-state--err">
             R engine offline — start the API to load charts.
           </p>
         ) : data.length === 0 ? (
-          <p className="chart-state">No data for the last 12 months.</p>
+          <p className="an-state">No data for the last 12 months.</p>
         ) : (
           <div className="monthly-chart" onClick={(e) => e.stopPropagation()}>
             <div className="monthly-y-axis">
@@ -1123,6 +1123,80 @@ function MonthlyDetailModal({ month, onClose }) {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Top vets chart ───────────────────────────────────────────────
+function TopVetsChart() {
+  const [data, setData]       = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState(null)
+
+  useEffect(() => {
+    api.analytics.topVets()
+      .then((res) => { setData(res.data ?? []); setLoading(false) })
+      .catch((err) => { setError(err.message); setLoading(false) })
+  }, [])
+
+  const max = data.length ? Math.max(...data.map(d => d.total), 1) : 1
+  const totalAll = data.reduce((s, d) => s + d.total, 0)
+
+  return (
+    <div className="an-card an-card--tall">
+      <div className="an-card-head">
+        <div>
+          <span className="an-card-title">Top Veterinarians</span>
+          <span className="an-card-sub">
+            {loading ? '…' : `${totalAll.toLocaleString()} total vaccinations`}
+          </span>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="an-state"><span className="an-spinner" /></div>
+      ) : error ? (
+        <div className="an-state an-state--err">{error}</div>
+      ) : data.length === 0 ? (
+        <div className="an-state">No vaccination records yet.</div>
+      ) : (
+        <div className="topvets-list">
+          {data.map((d, i) => (
+            <div key={d.vet_id} className="topvets-row">
+              <span className="topvets-rank">#{i + 1}</span>
+              <div className="topvets-body">
+                <div className="topvets-namerow">
+                  <span className="topvets-name">{d.vet_name}</span>
+                  <span className="topvets-total">{d.total.toLocaleString()}</span>
+                </div>
+                <div className="topvets-track-wrap">
+                  <div className="topvets-track">
+                    <div
+                      className="topvets-fill topvets-fill--drive"
+                      style={{ width: `${(d.drive / max) * 100}%` }}
+                      title={`Drive: ${d.drive}`}
+                    />
+                    <div
+                      className="topvets-fill topvets-fill--office"
+                      style={{ width: `${(d.office / max) * 100}%` }}
+                      title={`Office: ${d.office}`}
+                    />
+                  </div>
+                </div>
+                <div className="topvets-tags">
+                  <span className="topvets-tag topvets-tag--drive">🚐 Drive {d.drive}</span>
+                  <span className="topvets-tag topvets-tag--office">🏥 Office {d.office}</span>
+                  <span className="topvets-tag topvets-tag--pct">{d.pct}%</span>
+                </div>
+              </div>
+            </div>
+          ))}
+          <div className="topvets-legend">
+            <span><span className="topvets-dot topvets-dot--drive" />Barangay Drive</span>
+            <span><span className="topvets-dot topvets-dot--office" />Office Visit</span>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

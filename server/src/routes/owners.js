@@ -69,7 +69,6 @@ router.post('/', async (req, res, next) => {
   const client = await pool.connect();
   try {
     const { owner_name, contact_number, barangay_id, email } = req.body ?? {};
-    console.log('[owners POST] received:', { owner_name, contact_number, barangay_id, email });
     if (!owner_name || !barangay_id) {
       return res.status(400).json({ error: 'owner_name and barangay_id are required' });
     }
@@ -80,80 +79,62 @@ router.post('/', async (req, res, next) => {
       [owner_name],
     );
     if (dupName.rows.length > 0) {
-      return res.status(409).json({
-        error: 'An owner with this name already exists',
-        existing_owner_id: dupName.rows[0].owner_id,
-        existing_owner_name: dupName.rows[0].owner_name,
-      });
+      return res.status(409).json({ error: 'An owner with this name already exists.' });
     }
     if (email) {
       const dupEmail = await query(
-        `SELECT owner_id, owner_name FROM owner_table WHERE email = $1 AND deleted_at IS NULL`,
+        `SELECT owner_id FROM owner_table WHERE email = $1 AND deleted_at IS NULL`,
         [email],
       );
       if (dupEmail.rows.length > 0) {
-        return res.status(409).json({
-          error: 'An owner with this email already exists',
-          existing_owner_id: dupEmail.rows[0].owner_id,
-          existing_owner_name: dupEmail.rows[0].owner_name,
-        });
+        return res.status(409).json({ error: 'An owner with this email already exists.' });
       }
     }
 
     await client.query('BEGIN');
 
-    // Insert owner (with optional email)
+    // Generate credentials — hash before storing, plain text only used for the email.
+    const password     = email ? generatePassword() : null;
+    const pendingHash  = password ? await bcrypt.hash(password, 10) : null;
+
     const { rows: ownerRows } = await client.query(
-      `INSERT INTO owner_table (owner_name, contact_number, barangay_id, email)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO owner_table (owner_name, contact_number, barangay_id, email, pending_password)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING owner_id, owner_name, contact_number, barangay_id, email`,
-      [owner_name, contact_number, barangay_id, email ?? null],
+      [owner_name, contact_number ?? '', barangay_id, email ?? null, pendingHash],
     );
     const owner = ownerRows[0];
 
     let accountCreated = false;
 
     if (email) {
-      // Check if a user_profile already exists for this email
       const existing = await client.query(
-        `SELECT id FROM user_profile WHERE local_email = $1`, [email]
+        `SELECT id FROM user_profile WHERE local_email = $1`, [email],
       );
 
       if (existing.rows.length === 0) {
-        const password = generatePassword();
-        const hash = await bcrypt.hash(password, 10);
-
         await client.query(
           `INSERT INTO user_profile (display_name, role, local_email, local_password_hash, owner_id)
            VALUES ($1, 'OWNER', $2, $3, $4)`,
-          [owner_name, email, hash, owner.owner_id],
+          [owner_name, email, pendingHash, owner.owner_id],
         );
-
-        await client.query('COMMIT');
-
-        let emailError = null;
-        try {
-          await sendOwnerCredentials({ toEmail: email, ownerName: owner_name, password });
-          console.log('[email] credentials sent to', email);
-        } catch (err) {
-          emailError = err.message;
-          console.error('[email] FAILED to send to', email, '—', err.message, err.code ?? '');
-        }
-
-        accountCreated = true;
-        if (emailError) {
-          syncRecord('owner_table', 'owner_id', owner.owner_id);
-          return res.status(201).json({ ...owner, account_created: true, email_error: emailError });
-        }
       } else {
-        // Link existing account to this owner if not already linked
         await client.query(
-          `UPDATE user_profile SET owner_id = $1
-           WHERE local_email = $2 AND owner_id IS NULL`,
+          `UPDATE user_profile SET owner_id = $1 WHERE local_email = $2 AND owner_id IS NULL`,
           [owner.owner_id, email],
         );
-        await client.query('COMMIT');
-        accountCreated = true;
+      }
+
+      await client.query('COMMIT');
+      accountCreated = true;
+
+      // Best-effort direct email — if SMTP is not configured this is a no-op
+      // and the online module will handle it via pending_password on Supabase.
+      try {
+        await sendOwnerCredentials({ toEmail: email, ownerName: owner_name, password });
+        console.log('[email] credentials dispatched');
+      } catch (err) {
+        console.warn('[email] direct send skipped — pending_password set in Supabase for online module');
       }
     } else {
       await client.query('COMMIT');

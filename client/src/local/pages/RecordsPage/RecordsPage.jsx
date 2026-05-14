@@ -148,10 +148,12 @@ export default function RecordsPage() {
 
   return (
     <main className="records-page">
+
+      {/* ── Page header ───────────────────────────────────────── */}
       <div className="records-header">
         <div>
-          <h2 className="records-title">Records</h2>
-          <p className="records-sub">All vaccination records. Filter by session, edit, or delete entries.</p>
+          <h1 className="records-title">Records</h1>
+          <p className="records-sub">Vaccination records grouped by owner and pet.</p>
         </div>
         <div className="records-header-actions">
           <button type="button" className="btn btn-outline" onClick={() => setShowOwnersModal(true)}>
@@ -169,105 +171,97 @@ export default function RecordsPage() {
       {error && <div className="encode-banner encode-banner--error">{error}</div>}
       {flash && <div className="encode-banner encode-banner--ok">{flash}</div>}
 
-      {/* Tab toggle */}
+      {/* ── Tabs ──────────────────────────────────────────────── */}
       <div className="records-tabs">
         <button type="button" className={`records-tab${activeTab === 'records' ? ' is-active' : ''}`}
-          onClick={() => setActiveTab('records')}>Vaccination Records</button>
+          onClick={() => setActiveTab('records')}>💉 Vaccination Records</button>
         <button type="button" className={`records-tab${activeTab === 'registry' ? ' is-active' : ''}`}
-          onClick={() => setActiveTab('registry')}>Owner Registry</button>
+          onClick={() => setActiveTab('registry')}>👥 Owner Registry</button>
       </div>
 
       {activeTab === 'registry' && <RegistryView />}
 
       {activeTab === 'records' && <>
-      <div className="records-topbar">
-        <div className="records-count">
-          {loading ? (
-            <span className="records-count-num">…</span>
-          ) : (
-            <>
-              <span className="records-count-num">{grouped.length}</span>
-              <span className="records-count-label">
-                owner{grouped.length !== 1 ? 's' : ''} · {totalPets} pet{totalPets !== 1 ? 's' : ''} · {displayRecords.length} record{displayRecords.length !== 1 ? 's' : ''}
-                {q ? ` matching "${petSearch}"` : isPetOfficeFilter ? ' — Pet Office' : selectedSession ? ` in ${selectedSession.barangay_name}` : ''}
-              </span>
-            </>
-          )}
-          {capped && (
-            <span className="records-capped">Showing first 500 — filter by session to see all</span>
-          )}
-        </div>
 
-        <div className="records-filter">
-          <span className="records-filter-label">Filter by session</span>
-          <div className="records-filter-row">
-            <button
-              type="button"
-              className={`records-session-btn${sessionFilter ? ' has-value' : ''}`}
-              onClick={() => setShowSessionModal(true)}
-            >
-              <span>
-                {isPetOfficeFilter
-                  ? 'Pet Office'
-                  : selectedSession
-                  ? `${selectedSession.barangay_name} · ${fmtDate(selectedSession.session_date)}`
-                  : 'All records'}
-              </span>
-              <span className="records-session-caret">▾</span>
-            </button>
-            {sessionFilter && (
-              <button
-                type="button"
-                className="btn btn-outline records-clear-btn"
-                onClick={() => { setSessionFilter(''); setSessionSearch('') }}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="records-search-bar">
+      {/* ── Unified controls bar ──────────────────────────────── */}
+      <div className="records-controls">
         <input
           type="search"
           value={petSearch}
           onChange={(e) => setPetSearch(e.target.value)}
           placeholder="Search by pet name or owner…"
-          className="encode-input"
+          className="encode-input records-search"
         />
+        <button
+          type="button"
+          className={`records-session-btn${sessionFilter ? ' has-value' : ''}`}
+          onClick={() => setShowSessionModal(true)}
+        >
+          <span className="records-session-icon">🗂</span>
+          <span>
+            {isPetOfficeFilter
+              ? 'Pet Office'
+              : selectedSession
+              ? `${selectedSession.barangay_name} · ${fmtDate(selectedSession.session_date)}`
+              : 'All sessions'}
+          </span>
+          <span className="records-session-caret">▾</span>
+        </button>
+        {sessionFilter && (
+          <button type="button" className="btn btn-outline records-clear-btn"
+            onClick={() => { setSessionFilter(''); setSessionSearch('') }}>
+            ✕ Clear
+          </button>
+        )}
+        {!loading && (
+          <span className="records-summary-pill">
+            {grouped.length} owner{grouped.length !== 1 ? 's' : ''} · {totalPets} pet{totalPets !== 1 ? 's' : ''} · {displayRecords.length} record{displayRecords.length !== 1 ? 's' : ''}
+          </span>
+        )}
       </div>
+      {capped && (
+        <p className="records-capped">Showing first 500 records — filter by session to see all.</p>
+      )}
 
       {loading ? (
-        <p className="records-state">Loading…</p>
+        <div className="records-state-box">
+          <span className="records-spinner" />
+          <span>Loading records…</span>
+        </div>
       ) : displayRecords.length === 0 ? (
-        <p className="records-state">
-          {records.length === 0
-            ? (sessionFilter ? 'No records for this session.' : 'No vaccination records yet.')
-            : `No records match "${petSearch}".`}
-        </p>
+        <div className="records-state-box">
+          <span className="records-empty-icon">📋</span>
+          <span className="records-empty-title">
+            {records.length === 0
+              ? (sessionFilter ? 'No records for this session.' : 'No vaccination records yet.')
+              : `No records match "${petSearch}".`}
+          </span>
+        </div>
       ) : (
         <div className="owner-groups">
           {grouped.map((owner) => {
             const ownerOpen = expandedOwners.has(owner.owner_id)
             const ownerRecordCount = owner.pets.reduce((s, p) => s + p.records.length, 0)
             return (
-              <div key={owner.owner_id} className="owner-group">
+              <div key={owner.owner_id} className={`owner-group${ownerOpen ? ' is-open' : ''}`}>
                 <button
                   type="button"
-                  className={`owner-group-head${ownerOpen ? ' is-open' : ''}`}
+                  className="owner-group-head"
                   onClick={() => toggleOwner(owner.owner_id)}
                 >
                   <span className="owner-group-avatar">
                     {(owner.owner_name ?? '?').charAt(0).toUpperCase()}
                   </span>
-                  <span className="owner-group-name">{owner.owner_name}</span>
-                  {owner.barangay_name && (
-                    <span className="owner-group-brgy">Brgy. {owner.barangay_name}</span>
-                  )}
-                  <span className="owner-group-meta">
-                    {owner.pets.length} pet{owner.pets.length !== 1 ? 's' : ''} · {ownerRecordCount} record{ownerRecordCount !== 1 ? 's' : ''}
-                  </span>
+                  <div className="owner-group-info">
+                    <span className="owner-group-name">{owner.owner_name}</span>
+                    {owner.barangay_name && (
+                      <span className="owner-group-brgy">📍 {owner.barangay_name}</span>
+                    )}
+                  </div>
+                  <div className="owner-group-badges">
+                    <span className="owner-badge">{owner.pets.length} pet{owner.pets.length !== 1 ? 's' : ''}</span>
+                    <span className="owner-badge owner-badge--records">{ownerRecordCount} record{ownerRecordCount !== 1 ? 's' : ''}</span>
+                  </div>
                   <span className="owner-group-chevron" aria-hidden="true">
                     {ownerOpen ? '▲' : '▼'}
                   </span>
@@ -278,31 +272,33 @@ export default function RecordsPage() {
                     {owner.pets.map((pet) => {
                       const petOpen = expandedPets.has(pet.pet_id)
                       return (
-                        <div key={pet.pet_id} className="pet-group">
+                        <div key={pet.pet_id} className={`pet-group${petOpen ? ' is-open' : ''}`}>
                           <button
                             type="button"
-                            className={`pet-group-head${petOpen ? ' is-open' : ''}`}
+                            className="pet-group-head"
                             onClick={() => togglePet(pet.pet_id)}
                           >
-                            <span className="pet-group-icon" aria-hidden="true">
-                              {pet.pet_type?.[0]?.toUpperCase() ?? 'P'}
-                            </span>
-                            <span className="pet-group-name">{pet.pet_name}</span>
-                            <span className="pet-group-type">
-                              {pet.pet_type}{pet.pet_age ? ` · ${pet.pet_age}` : ''}
-                            </span>
-                            <span className="pet-group-count">
+                            <span className="pet-group-icon">🐾</span>
+                            <div className="pet-group-info">
+                              <span className="pet-group-name">{pet.pet_name}</span>
+                              <span className="pet-group-type">
+                                {pet.pet_type}{pet.pet_age ? ` · ${pet.pet_age}` : ''}
+                              </span>
+                            </div>
+                            <span className="pet-badge">
                               {pet.records.length} record{pet.records.length !== 1 ? 's' : ''}
                             </span>
-                            <span className="pet-group-chevron" aria-hidden="true">
-                              {petOpen ? '▲' : '▼'}
-                            </span>
+                            <span className="pet-group-chevron">{petOpen ? '▲' : '▼'}</span>
                           </button>
 
                           {petOpen && (
-                            <ul className="pet-records-list">
+                            <div className="pet-records-list">
+                              <div className="prl-head">
+                                <span>Date</span><span>Type</span><span>Vaccine</span>
+                                <span>Veterinarian</span><span>Code</span><span></span>
+                              </div>
                               {pet.records.map((r) => (
-                                <li
+                                <div
                                   key={r.vaccine_id}
                                   className="pet-record-row"
                                   onClick={() => setViewTarget(r)}
@@ -315,12 +311,12 @@ export default function RecordsPage() {
                                   <span className="prl-vet">{r.vet_name ?? '—'}</span>
                                   <span className="prl-code">{r.approval_code ?? '—'}</span>
                                   <div className="prl-actions" onClick={(e) => e.stopPropagation()}>
-                                    <button type="button" className="btn btn-outline records-action-btn" onClick={() => setEditTarget(r)}>Edit</button>
-                                    <button type="button" className="records-del-btn" onClick={() => setDeleteTarget(r)}>Delete</button>
+                                    <button type="button" className="prl-btn-edit" onClick={() => setEditTarget(r)}>Edit</button>
+                                    <button type="button" className="prl-btn-del" onClick={() => setDeleteTarget(r)}>✕</button>
                                   </div>
-                                </li>
+                                </div>
                               ))}
-                            </ul>
+                            </div>
                           )}
                         </div>
                       )
@@ -534,19 +530,19 @@ function RegistryView() {
 
   return (
     <div className="registry">
-      <div className="registry-toolbar">
+      <div className="records-controls">
         <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by owner name, contact, or barangay…"
-          className="encode-input" />
-        <span className="registry-count">
+          className="encode-input records-search" />
+        <span className="records-summary-pill">
           {loading ? '…' : `${filtered.length} owner${filtered.length !== 1 ? 's' : ''}`}
         </span>
       </div>
 
       {loading ? (
-        <p className="records-state">Loading owners…</p>
+        <div className="records-state-box"><span className="records-spinner" /></div>
       ) : filtered.length === 0 ? (
-        <p className="records-state">No owners found.</p>
+        <div className="records-state-box"><span className="records-empty-icon">👥</span><span className="records-empty-title">No owners found.</span></div>
       ) : (
         <div className="owner-groups">
           {filtered.map((owner) => {

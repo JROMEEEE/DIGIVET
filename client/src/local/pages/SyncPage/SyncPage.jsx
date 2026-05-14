@@ -84,18 +84,10 @@ export default function SyncPage() {
           <p className="sync-sub">Push all local records to the online database.</p>
         </div>
         {!loading && phase === 'idle' && (
-          <div className="sync-header-actions">
-            {status?.connected && (
-              <button type="button" className="btn btn-outline sync-start-btn"
-                onClick={() => setShowCompare(true)}>
-                Compare
-              </button>
-            )}
-            <button type="button" className="btn btn-primary sync-start-btn"
-              onClick={() => setPhase('auth')}>
-              Push to Supabase
-            </button>
-          </div>
+          <button type="button" className="btn btn-primary sync-start-btn"
+            onClick={() => setPhase('auth')}>
+            Push to Supabase
+          </button>
         )}
       </div>
 
@@ -106,7 +98,6 @@ export default function SyncPage() {
           <span className="sync-status-label">
             {status?.connected ? 'Supabase connected' : 'Supabase not configured'}
           </span>
-          <span className="sync-status-url">{status?.supabase_url ?? '—'}</span>
         </div>
         <div className="sync-last">
           <span className="sync-last-label">Last sync</span>
@@ -140,10 +131,16 @@ export default function SyncPage() {
                 {mirrorLoading ? '…' : '↻'}
               </button>
               {mirror && !mirror.mirrored && (
-                <button type="button" className="btn btn-primary mirror-pull-btn"
-                  onClick={() => setPhase('pull-confirm')}>
-                  Pull Changes
-                </button>
+                <>
+                  <button type="button" className="btn btn-outline mirror-pull-btn"
+                    onClick={() => setShowCompare(true)}>
+                    View diff
+                  </button>
+                  <button type="button" className="btn btn-primary mirror-pull-btn"
+                    onClick={() => setPhase('pull-confirm')}>
+                    Pull Changes
+                  </button>
+                </>
               )}
             </div>
           </div>

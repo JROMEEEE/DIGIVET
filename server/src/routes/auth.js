@@ -10,7 +10,7 @@ import { requireAuth } from '../middleware/requireAuth.js';
 import { sendOwnerCredentials } from '../lib/email.js';
 
 const router = express.Router();
-const JWT_SECRET  = process.env.JWT_SECRET ?? 'digivet-dev-secret-change-in-prod';
+const JWT_SECRET  = process.env.JWT_SECRET; // required — server refuses to start without it (see requireAuth.js)
 const SALT_ROUNDS = 10;
 
 function signToken(user) {
@@ -162,7 +162,8 @@ router.post('/test-email', async (req, res, next) => {
     await sendOwnerCredentials({ toEmail: to, ownerName: 'Test Owner', password: 'TestPass123' });
     res.json({ ok: true, message: `Test email sent to ${to}` });
   } catch (err) {
-    res.status(500).json({ error: err.message, code: err.code });
+    console.error('[auth] email test error:', err.message);
+    res.status(500).json({ error: 'Failed to send test email.' });
   }
 });
 

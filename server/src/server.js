@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import { sanitizeError } from './lib/sanitizeError.js';
 import cors from 'cors';
 import morgan from 'morgan';
 import healthRouter from './routes/health.js';
@@ -45,8 +46,9 @@ app.use((_req, res) => {
 });
 
 app.use((err, _req, res, _next) => {
-  console.error('[server] error:', err.message);
-  res.status(500).json({ error: 'Internal server error', detail: err.message });
+  // Log full detail server-side only — never expose raw messages to the client
+  console.error('[server] error:', err.code ?? '', err.message);
+  res.status(500).json({ error: sanitizeError(err) });
 });
 
 try {

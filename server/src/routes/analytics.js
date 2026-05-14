@@ -1,5 +1,6 @@
 import express from 'express';
 import { query } from '../local/db.js';
+import { sanitizeError } from '../lib/sanitizeError.js';
 
 const router = express.Router();
 const R_API  = process.env.R_PLUMBER_URL ?? 'http://localhost:8000';
@@ -9,13 +10,11 @@ async function proxyToR(path, res) {
     const upstream = await fetch(`${R_API}${path}`, { signal: AbortSignal.timeout(5000) });
     const data = await upstream.json();
     res.status(upstream.ok ? 200 : upstream.status).json(data);
-  } catch (err) {
+  } catch {
     res.status(503).json({
-      status:  'offline',
-      error:   'R analytics engine is not reachable',
-      detail:  err.message,
-      hint:    'Run:  Rscript r-api/run.R  (or source run.R in RStudio)',
-      r_url:   R_API,
+      status: 'offline',
+      error:  'R analytics engine is not reachable',
+      hint:   'Run:  Rscript r-api/run.R  (or source run.R in RStudio)',
     });
   }
 }
@@ -58,7 +57,8 @@ router.get('/all-barangays-classified', async (_req, res) => {
 
     res.json({ status: 'ok', total: classified.length, barangays: classified });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[analytics] error:', err.message);
+    res.status(500).json({ error: sanitizeError(err) });
   }
 });
 
@@ -100,7 +100,8 @@ router.get('/barangay-risk-detail', async (req, res) => {
 
     res.json({ barangay: summary.rows[0] ?? null, pets: pets.rows });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[analytics] error:', err.message);
+    res.status(500).json({ error: sanitizeError(err) });
   }
 });
 router.get('/pet-type-breakdown', (_req, res) => proxyToR('/pet-type-breakdown', res));
@@ -133,5 +134,28 @@ router.get('/barangay-coverage', (req, res) => {
 });
 
 
+
+/* ── Top vets by vaccination count (pure SQL — no R needed) ─── */
+router.get('/top-vets', async (_req, res, next) => {
+  try {
+    const { rows } = await query(`
+      SELECT
+        v.vet_id,
+        v.vet_name,
+        COUNT(vac.vaccine_id)::int                                                       AS total,
+        SUM(CASE WHEN vac.is_office_visit  THEN 1 ELSE 0 END)::int                      AS office,
+        SUM(CASE WHEN NOT vac.is_office_visit THEN 1 ELSE 0 END)::int                   AS drive,
+        ROUND(COUNT(vac.vaccine_id)::numeric /
+          NULLIF(SUM(COUNT(vac.vaccine_id)) OVER (), 0) * 100, 1)::float                AS pct
+      FROM vet_table v
+      LEFT JOIN vaccine_table vac
+        ON vac.vet_id = v.vet_id AND vac.deleted_at IS NULL
+      GROUP BY v.vet_id, v.vet_name
+      ORDER BY total DESC
+      LIMIT 10
+    `);
+    res.json({ status: 'ok', data: rows });
+  } catch (err) { next(err); }
+});
 
 export default router;

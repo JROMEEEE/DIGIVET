@@ -19,6 +19,12 @@ async function request(path, { method = 'GET', body, signal } = {}) {
   });
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
+
+  // Stale / invalid token — clear it so the app redirects to login automatically
+  if (res.status === 401 && token) {
+    try { localStorage.removeItem('digivet_token'); localStorage.removeItem('digivet_user'); } catch {}
+  }
+
   if (!res.ok) {
     const err = new Error(data?.message ?? data?.error ?? `Request failed (${res.status})`);
     err.status = res.status;
@@ -59,6 +65,7 @@ export const api = {
     barangayRiskDetail:      (name) => request(`/analytics/barangay-risk-detail?name=${encodeURIComponent(name)}`),
     allBarangaysClassified:  ()     => request('/analytics/all-barangays-classified'),
     petTypeBreakdown: () => request('/analytics/pet-type-breakdown'),
+    topVets:          () => request('/analytics/top-vets'),
     petTypeDetail: (type) => request(`/analytics/pet-type-detail?type=${encodeURIComponent(type)}`),
     monthlyDetail: (month) => request(`/analytics/monthly-detail?month=${encodeURIComponent(month)}`),
     monthlyTrends: ({ months } = {}) => {

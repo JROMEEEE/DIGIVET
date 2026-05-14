@@ -886,7 +886,7 @@ function VaccinationForm({ vets, isDrive, showVetForm, onToggleVetForm, onCreate
   const [form, setForm] = useState({
     vaccine_date: todayIso(),
     vet_id: '',
-    vaccine_details: '',
+    vaccine_details: 'Rabisin',
     manufacturer_no: '',
     is_office_visit: false,
   })
@@ -928,25 +928,10 @@ function VaccinationForm({ vets, isDrive, showVetForm, onToggleVetForm, onCreate
           <input required value={form.manufacturer_no} onChange={update('manufacturer_no')} className="encode-input" />
         </label>
         <label>Vaccine
-          <input
-            required
-            list="vaccine-list"
-            placeholder="e.g. Rabisin, Dog 5-in-1"
-            value={form.vaccine_details}
-            onChange={update('vaccine_details')}
-            className="encode-input"
-          />
-          <datalist id="vaccine-list">
-            <option value="Rabisin" />
-            <option value="Dog 5-in-1 (DHPP)" />
-            <option value="Dog 6-in-1 (DHPP + Lepto)" />
-            <option value="Kennel Cough (Bordetella)" />
-            <option value="Cat 3-in-1 (FVRCP)" />
-            <option value="Leptospirosis" />
-            <option value="Parvovirus" />
-            <option value="Distemper" />
-            <option value="Anti-Rabies Booster" />
-          </datalist>
+          <select required value={form.vaccine_details} onChange={update('vaccine_details')} className="encode-input">
+            <option value="">— select —</option>
+            <option value="Rabisin">Rabisin</option>
+          </select>
         </label>
 
         {isDrive && (
