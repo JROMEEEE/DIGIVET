@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import jsQR from 'jsqr'
 import { api } from '../../api'
 import './RecordsPage.css'
 
@@ -51,6 +52,8 @@ export default function RecordsPage() {
   const [viewTarget, setViewTarget]         = useState(null)
   const [showOwnersModal, setShowOwnersModal] = useState(false)
   const [showPetsModal, setShowPetsModal]     = useState(false)
+  const [showQrScanner, setShowQrScanner]     = useState(false)
+  const [qrResult, setQrResult]               = useState(null)
   const [editTarget, setEditTarget]         = useState(null)
   const [deleteTarget, setDeleteTarget]     = useState(null)
   const [flash, setFlash]               = useState(null)
@@ -162,6 +165,9 @@ export default function RecordsPage() {
           <button type="button" className="btn btn-outline" onClick={() => setShowPetsModal(true)}>
             Manage Pets
           </button>
+          <button type="button" className="btn btn-outline qr-scan-btn" onClick={() => setShowQrScanner(true)}>
+            Scan QR
+          </button>
           <button type="button" className="btn btn-primary" onClick={() => navigate('/dashboard/encode')}>
             + New record
           </button>
@@ -174,9 +180,9 @@ export default function RecordsPage() {
       {/* ── Tabs ──────────────────────────────────────────────── */}
       <div className="records-tabs">
         <button type="button" className={`records-tab${activeTab === 'records' ? ' is-active' : ''}`}
-          onClick={() => setActiveTab('records')}>💉 Vaccination Records</button>
+          onClick={() => setActiveTab('records')}>Vaccination Records</button>
         <button type="button" className={`records-tab${activeTab === 'registry' ? ' is-active' : ''}`}
-          onClick={() => setActiveTab('registry')}>👥 Owner Registry</button>
+          onClick={() => setActiveTab('registry')}>Owner Registry</button>
       </div>
 
       {activeTab === 'registry' && <RegistryView />}
@@ -463,6 +469,15 @@ export default function RecordsPage() {
       )}
       {showPetsModal && (
         <PetsManageModal onClose={() => setShowPetsModal(false)} />
+      )}
+      {showQrScanner && (
+        <QrScannerModal
+          onClose={() => setShowQrScanner(false)}
+          onResult={(data) => { setShowQrScanner(false); setQrResult(data) }}
+        />
+      )}
+      {qrResult && (
+        <QrResultModal data={qrResult} onClose={() => setQrResult(null)} />
       )}
     </main>
   )
@@ -1015,6 +1030,188 @@ function RecordViewModal({ record: r, sessions, onClose, onEdit, onDelete }) {
           <button type="button" className="rvm-delete-btn" onClick={() => onDelete(r)}>
             Delete
           </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── QR Scanner Modal ────────────────────────────────────────── */
+function QrScannerModal({ onClose, onResult }) {
+  const videoRef  = useRef(null)
+  const canvasRef = useRef(null)
+  const rafRef    = useRef(null)
+  const streamRef = useRef(null)
+  const [error, setError] = useState(null)
+  const [scanning, setScanning] = useState(false)
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then((stream) => {
+        streamRef.current = stream
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          videoRef.current.play()
+          setScanning(true)
+        }
+      })
+      .catch(() => setError('Camera access denied. Please allow camera permissions and try again.'))
+
+    return () => {
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!scanning) return
+    const canvas = canvasRef.current
+    const video  = videoRef.current
+    if (!canvas || !video) return
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+
+    function tick() {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width  = video.videoWidth
+        canvas.height = video.videoHeight
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        const img  = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
+
+        if (code?.data) {
+          try {
+            const parsed = JSON.parse(code.data)
+            if (parsed.type === 'DIGIVET_OWNER') {
+              if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+              cancelAnimationFrame(rafRef.current)
+              onResult(parsed)
+              return
+            }
+          } catch {}
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    rafRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [scanning, onResult])
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal qr-modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <h3 className="modal-title">📷 Scan Owner QR Code</h3>
+            <p className="qr-modal-sub">Point the camera at a DIGIVET QR code</p>
+          </div>
+          <button type="button" className="modal-close-btn" onClick={onClose}>×</button>
+        </div>
+
+        {error ? (
+          <div className="qr-error">
+            <span className="qr-error-icon">⚠️</span>
+            <p>{error}</p>
+          </div>
+        ) : (
+          <div className="qr-viewfinder-wrap">
+            <video ref={videoRef} className="qr-video" playsInline muted />
+            <canvas ref={canvasRef} className="qr-canvas-hidden" />
+            <div className="qr-overlay">
+              <div className="qr-frame" />
+            </div>
+            <p className="qr-hint">Scanning for DIGIVET QR code…</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ── QR Result Modal ─────────────────────────────────────────── */
+function QrResultModal({ data, onClose }) {
+  const { owner, pets, generated_at } = data
+
+  function fmtDate(d) {
+    if (!d) return '—'
+    const s = String(d)
+    return new Date(s.includes('T') ? s : s + 'T00:00:00').toLocaleDateString('en-PH', {
+      year: 'numeric', month: 'long', day: 'numeric',
+    })
+  }
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal modal--lg qr-result-modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="qr-result-head">
+          <div className="qr-result-head-left">
+            <span className="qr-result-avatar">{owner?.name?.charAt(0)?.toUpperCase() ?? '?'}</span>
+            <div>
+              <h3 className="qr-result-name">{owner?.name ?? '—'}</h3>
+              {owner?.email && <p className="qr-result-email">{owner.email}</p>}
+            </div>
+          </div>
+          <div className="qr-result-head-right">
+            <span className="qr-verified-badge">✓ Verified QR</span>
+            <button type="button" className="modal-close-btn" onClick={onClose}>×</button>
+          </div>
+        </div>
+
+        {/* Pets */}
+        <div className="modal-scroll">
+          {(!pets || pets.length === 0) ? (
+            <p className="qr-no-pets">No pet records in this QR code.</p>
+          ) : (
+            <div className="qr-pets">
+              {pets.map((pet, i) => (
+                <div key={i} className="qr-pet-card">
+                  <div className="qr-pet-head">
+                    <span className="qr-pet-icon">🐾</span>
+                    <div className="qr-pet-identity">
+                      <span className="qr-pet-name">{pet.name}</span>
+                      <span className="qr-pet-meta">
+                        {pet.type}{pet.color ? ` · ${pet.color}` : ''}{pet.age ? ` · ${pet.age}` : ''}
+                      </span>
+                    </div>
+                    <span className="qr-pet-doses">
+                      {pet.doses} dose{pet.doses !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+
+                  <div className="qr-pet-vax">
+                    <div className="qr-vax-row">
+                      <span className="qr-vax-label">Last Vaccine</span>
+                      <span className="qr-vax-val">{pet.last_vaccine ?? '—'}</span>
+                    </div>
+                    <div className="qr-vax-row">
+                      <span className="qr-vax-label">Date</span>
+                      <span className="qr-vax-val">{fmtDate(pet.last_vacc_date)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="qr-result-foot">
+          <span className="qr-generated">Generated {fmtDate(generated_at)}</span>
+          <button type="button" className="btn btn-outline" onClick={onClose}>Close</button>
         </div>
       </div>
     </div>

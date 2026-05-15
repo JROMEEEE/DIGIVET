@@ -119,11 +119,14 @@ export default function SyncPage() {
             <div className="mirror-card-info">
               <span className="mirror-card-title">
                 {!mirror && mirrorLoading ? 'Checking Supabase…'
-                  : mirror?.mirrored ? 'Local DB mirrors Supabase'
-                  : `Supabase has ${mirror?.total_diffs} table${mirror?.total_diffs !== 1 ? 's' : ''} with changes`}
+                  : mirror?.mirrored ? 'No new changes from Supabase'
+                  : `Supabase has ${mirror?.total_diffs} table${mirror?.total_diffs !== 1 ? 's' : ''} with new changes`}
               </span>
               <span className="mirror-card-sub">
-                {mirror?.checked_at ? `Last checked ${timeAgo(mirror.checked_at)} · auto-refreshes every 30 s` : 'Polling Supabase for changes…'}
+                {mirror?.mirrored
+                  ? `Nothing to pull · any local pending records still need to be pushed`
+                  : mirror?.checked_at ? `Last checked ${timeAgo(mirror.checked_at)} · auto-refreshes every 30 s`
+                  : 'Polling Supabase for changes…'}
               </span>
             </div>
             <div className="mirror-card-actions">

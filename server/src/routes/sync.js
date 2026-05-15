@@ -15,13 +15,9 @@ const SYNC_TABLES = [
   { name: 'drive_session_table', pk: 'session_id',   display: 'session_date',     softDelete: false },
   { name: 'approval_id_table',   pk: 'approval_id',  display: 'approval_code',    softDelete: false },
   { name: 'vaccine_table',       pk: 'vaccine_id',   display: 'vaccine_details',  softDelete: true  },
-  // user_profile: push-only (UUID PK, excluded from pull/mirror).
-  // strip removes local-only auth columns before sending to Supabase.
-  {
-    name: 'user_profile', pk: 'id', display: 'display_name', softDelete: false,
-    strip: (row) => { const { local_password_hash, ...rest } = row; return rest; },
-    mirrorSkip: true,
-  },
+  // user_profile intentionally excluded: UUID PK clashes with Supabase Auth UUIDs,
+  // causing unique-email constraint violations that silently block last_sync_at from advancing.
+  // Owner accounts sync via syncRecord() on write instead.
 ];
 
 /* ── Pending records for a single table ──────────────────────── */
@@ -146,13 +142,13 @@ router.post('/push', requireAuth, async (req, res, next) => {
 
   const results = [];
   let totalSynced = 0;
+  // Capture push-start time. last_sync_at will be set to this value so that
+  // any row modified DURING the push is still picked up next time.
+  const syncStartTime = new Date().toISOString();
 
   try {
-    // Fetch cursor INSIDE try so any DB failure is caught and reported.
     const logResult = await query(`SELECT last_sync_at FROM sync_log WHERE id = 1`).catch(() => ({ rows: [] }));
     const since = logResult.rows[0]?.last_sync_at ?? null;
-
-    if (!since) console.warn('[sync/push] No last_sync_at — full table scan (first push or reset)');
     // ── Pass 1: upsert active records (forward order) ──────────
     const upsertResults = {};
     for (const { name, pk, softDelete, strip } of SYNC_TABLES) {
@@ -176,15 +172,14 @@ router.post('/push', requireAuth, async (req, res, next) => {
     }
 
     // ── Pass 2: hard-delete soft-deleted rows from Supabase ─────────
-    // Scope to updated_at > last_sync so we don't re-send deletes that
-    // were already processed by a previous push.
-    const sinceFilter = since
-      ? `WHERE deleted_at IS NOT NULL AND updated_at > '${since}'`
-      : `WHERE deleted_at IS NOT NULL`;
+    // Use parameterized queries — never interpolate Date objects into SQL strings.
+    const delQ = since
+      ? (tbl, col) => query(`SELECT ${col} FROM ${tbl} WHERE deleted_at IS NOT NULL AND updated_at > $1`, [since])
+      : (tbl, col) => query(`SELECT ${col} FROM ${tbl} WHERE deleted_at IS NOT NULL`);
 
-    const deletedPetIds   = (await query(`SELECT pet_id    FROM pet_table    ${sinceFilter}`)).rows.map(r => r.pet_id);
-    const deletedOwnerIds = (await query(`SELECT owner_id  FROM owner_table  ${sinceFilter}`)).rows.map(r => r.owner_id);
-    const deletedVaxIds   = (await query(`SELECT vaccine_id FROM vaccine_table ${sinceFilter}`)).rows.map(r => r.vaccine_id);
+    const deletedPetIds   = (await delQ('pet_table',    'pet_id'   )).rows.map(r => r.pet_id);
+    const deletedOwnerIds = (await delQ('owner_table',  'owner_id' )).rows.map(r => r.owner_id);
+    const deletedVaxIds   = (await delQ('vaccine_table','vaccine_id')).rows.map(r => r.vaccine_id);
 
     // Cascade order: vaccines → pets → owners
     // Each step also sweeps by parent ID so orphaned Supabase rows can't block deletes.
@@ -238,35 +233,27 @@ router.post('/push', requireAuth, async (req, res, next) => {
     const hasErrors    = results.some((r) => r.status === 'error');
     const overallStatus = hasErrors ? 'partial' : 'ok';
 
-    if (!hasErrors) {
-      // Full success — advance the cursor so next sync only picks up new changes
-      await query(
-        `INSERT INTO sync_log
-           (id, last_sync_at, last_attempt_at, synced_by, records_synced, status)
-         VALUES (1, NOW(), NOW(), $1, $2, $3)
-         ON CONFLICT (id) DO UPDATE SET
-           last_sync_at    = NOW(),
-           last_attempt_at = NOW(),
-           synced_by       = $1,
-           records_synced  = $2,
-           status          = $3`,
-        [req.user.id, totalSynced, overallStatus],
-      );
-    } else {
-      // Partial / error — record the attempt but DO NOT advance last_sync_at.
-      // Failed records still have updated_at > last_sync_at so they stay pending.
-      await query(
-        `INSERT INTO sync_log
-           (id, last_attempt_at, synced_by, records_synced, status)
-         VALUES (1, NOW(), $1, $2, $3)
-         ON CONFLICT (id) DO UPDATE SET
-           last_attempt_at = NOW(),
-           synced_by       = $1,
-           records_synced  = $2,
-           status          = $3`,
-        [req.user.id, totalSynced, overallStatus],
-      );
+    if (hasErrors) {
+      console.error('[sync/push] partial errors:', results.filter(r => r.status === 'error').map(r => `${r.table}: ${r.error}`).join(' | '));
     }
+
+    // ALWAYS advance both cursors to syncStartTime:
+    // • last_sync_at → push cursor (rows already sent won't show as pending again)
+    // • last_pull_at → mirror baseline (Supabase trigger bumps from this push
+    //   fall within the 60 s grace window → no false "Supabase has new changes")
+    await query(
+      `INSERT INTO sync_log
+         (id, last_sync_at, last_pull_at, last_attempt_at, synced_by, records_synced, status)
+       VALUES (1, $1, $1, $1, $2, $3, $4)
+       ON CONFLICT (id) DO UPDATE SET
+         last_sync_at    = $1,
+         last_pull_at    = $1,
+         last_attempt_at = $1,
+         synced_by       = $2,
+         records_synced  = $3,
+         status          = $4`,
+      [syncStartTime, req.user.id, totalSynced, overallStatus],
+    );
 
     res.json({ status: overallStatus, results, total_synced: totalSynced });
   } catch (err) { next(err); }

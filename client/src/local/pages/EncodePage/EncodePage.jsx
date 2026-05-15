@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import jsQR from 'jsqr'
 import { api } from '../../api'
 import './EncodePage.css'
 
@@ -58,6 +59,81 @@ export default function EncodePage() {
 
   const [flash, setFlash] = useState(null)
   const [error, setError] = useState(null)
+
+  // QR scanning
+  const [showQrScanner, setShowQrScanner] = useState(false)
+  const [qrScanning, setQrScanning]       = useState(false) // prevents double-fire
+
+  const handleQrResult = useCallback(async (payload) => {
+    if (qrScanning) return
+    setQrScanning(true)
+    setShowQrScanner(false)
+    try {
+      // Search by name — the endpoint matches on owner_name, not email
+      const q = payload.owner?.name ?? payload.owner?.email ?? ''
+      const results = await api.owners.search(q, 5)
+      const match = results.find((o) =>
+        (payload.owner?.email && o.email === payload.owner.email) ||
+        (payload.owner?.name  && o.owner_name?.toLowerCase() === payload.owner.name.toLowerCase())
+      ) ?? results[0]
+
+      if (!match) {
+        flashMessage(`Owner "${payload.owner?.name}" not found in local database.`)
+        setQrScanning(false)
+        return
+      }
+
+      const enriched = {
+        ...match,
+        barangay_name: barangays.find((b) => b.barangay_id === match.barangay_id)?.barangay_name,
+      }
+
+      // The QR may carry one or more pets — try to auto-select the first match
+      const qrPetName = payload.pets?.[0]?.name?.toLowerCase() ?? ''
+
+      if (mode === 'drive') {
+        // Pet list is already loaded — find by owner + name
+        const matchedPet = drivePets.find(
+          (p) => p.owner_id === match.owner_id &&
+                 p.pet_name?.toLowerCase() === qrPetName
+        )
+        if (matchedPet) {
+          setSelectedOwner({ owner_id: matchedPet.owner_id, owner_name: matchedPet.owner_name, contact_number: matchedPet.contact_number })
+          setSelectedPet(matchedPet)
+          setVaccinationKey((k) => k + 1)
+          flashMessage(`"${matchedPet.pet_name}" selected — proceed to record vaccination.`)
+        } else {
+          setDriveFilter(match.owner_name)
+          flashMessage(`Owner found — select a pet for "${match.owner_name}" below.`)
+        }
+      } else if (mode === 'office') {
+        setSelectedOwner(enriched)
+        setOwnerMode('existing')
+        if (qrPetName) {
+          // Fetch this owner's pets and auto-select the matching one
+          try {
+            const ownerPets = await api.pets.list({ owner_id: match.owner_id })
+            const matchedPet = ownerPets.find(
+              (p) => p.pet_name?.toLowerCase() === qrPetName
+            )
+            if (matchedPet) {
+              selectPet(matchedPet)
+              flashMessage(`"${matchedPet.pet_name}" selected — proceed to record vaccination.`)
+            } else {
+              flashMessage(`Owner "${match.owner_name}" selected via QR.`)
+            }
+          } catch {
+            flashMessage(`Owner "${match.owner_name}" selected via QR.`)
+          }
+        } else {
+          flashMessage(`Owner "${match.owner_name}" selected via QR.`)
+        }
+      }
+    } catch {
+      flashMessage('QR scan failed — could not look up owner.')
+    }
+    setQrScanning(false)
+  }, [qrScanning, barangays, mode, drivePets]) // eslint-disable-line
 
   useEffect(() => {
     Promise.all([api.barangays.list(), api.vets.list()])
@@ -279,6 +355,7 @@ export default function EncodePage() {
             pets={drivePets}
             filter={driveFilter}
             onFilterChange={setDriveFilter}
+            onScanQr={() => setShowQrScanner(true)}
             onSelectPet={(p) => {
               setSelectedPet(p)
               setSelectedOwner({ owner_id: p.owner_id, owner_name: p.owner_name, contact_number: p.contact_number })
@@ -307,6 +384,10 @@ export default function EncodePage() {
                 <button type="button" className="encode-choice-btn" onClick={() => setOwnerMode('new')}>
                   <span className="encode-choice-icon" aria-hidden="true">+</span>
                   <span><strong>New owner</strong><small>Register a first-time pet owner.</small></span>
+                </button>
+                <button type="button" className="encode-choice-btn encode-choice-btn--qr" onClick={() => setShowQrScanner(true)}>
+                  <span className="encode-choice-icon encode-choice-icon--qr" aria-hidden="true">📷</span>
+                  <span><strong>Scan owner QR</strong><small>Scan the owner's DIGIVET QR code.</small></span>
                 </button>
               </div>
             ) : ownerMode === 'existing' ? (
@@ -423,6 +504,13 @@ export default function EncodePage() {
             )}
           </Step>
         </>
+      )}
+
+      {showQrScanner && (
+        <EncodeQrScanner
+          onClose={() => setShowQrScanner(false)}
+          onResult={handleQrResult}
+        />
       )}
     </main>
   )
@@ -593,7 +681,7 @@ function SessionBanner({ mode, session, onChangeSession, onChangeMode }) {
   )
 }
 
-function DrivePetList({ pets, filter, onFilterChange, onSelectPet, onCreatePet, onNewRegistration, barangayName }) {
+function DrivePetList({ pets, filter, onFilterChange, onScanQr, onSelectPet, onCreatePet, onNewRegistration, barangayName }) {
   const [addingForOwner, setAddingForOwner] = useState(null)
   const [showNewReg, setShowNewReg]         = useState(false)
 
@@ -632,6 +720,14 @@ function DrivePetList({ pets, filter, onFilterChange, onSelectPet, onCreatePet, 
             placeholder="Filter by pet name or owner…"
             className="encode-input"
           />
+          <button
+            type="button"
+            className="btn btn-outline drive-qr-btn"
+            onClick={onScanQr}
+            title="Scan owner QR code"
+          >
+            Scan QR
+          </button>
           <button
             type="button"
             className="btn btn-outline"
@@ -812,6 +908,97 @@ function Step({ n, title, done, disabled, summary, children }) {
       </header>
       <div className="encode-step-body">{children}</div>
     </section>
+  )
+}
+
+/* ── QR scanner for encoding ─────────────────────────────────── */
+function EncodeQrScanner({ onClose, onResult }) {
+  const videoRef  = useRef(null)
+  const canvasRef = useRef(null)
+  const rafRef    = useRef(null)
+  const streamRef = useRef(null)
+  const [camError, setCamError] = useState(null)
+  const [ready, setReady]       = useState(false)
+
+  useEffect(() => {
+    function onKey(e) { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  useEffect(() => {
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      .then((stream) => {
+        streamRef.current = stream
+        if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play() }
+        setReady(true)
+      })
+      .catch(() => setCamError('Camera access denied. Please allow camera permissions and try again.'))
+    return () => {
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!ready) return
+    const canvas = canvasRef.current
+    const video  = videoRef.current
+    if (!canvas || !video) return
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+
+    function tick() {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width  = video.videoWidth
+        canvas.height = video.videoHeight
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        const img  = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
+        if (code?.data) {
+          try {
+            const parsed = JSON.parse(code.data)
+            if (parsed.type === 'DIGIVET_OWNER') {
+              if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
+              cancelAnimationFrame(rafRef.current)
+              onResult(parsed)
+              return
+            }
+          } catch {}
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    }
+    rafRef.current = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [ready, onResult])
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal encode-qr-modal" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div>
+            <h3 className="modal-title">📷 Scan Owner QR Code</h3>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>
+              Point the camera at the owner's DIGIVET QR code
+            </p>
+          </div>
+          <button type="button" className="modal-close-btn" onClick={onClose}>×</button>
+        </div>
+        {camError ? (
+          <div className="qr-error">
+            <span className="qr-error-icon">⚠️</span>
+            <p>{camError}</p>
+          </div>
+        ) : (
+          <div className="qr-viewfinder-wrap">
+            <video ref={videoRef} className="qr-video" playsInline muted />
+            <canvas ref={canvasRef} className="qr-canvas-hidden" />
+            <div className="qr-overlay"><div className="qr-frame" /></div>
+            <p className="qr-hint">Scanning for DIGIVET owner QR…</p>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
 

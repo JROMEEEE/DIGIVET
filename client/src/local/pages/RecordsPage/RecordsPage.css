@@ -613,6 +613,153 @@
 /* ── Records edit form ───────────────────────────────────────── */
 .records-edit-form { padding: 16px; }
 
+/* ── QR Scan button ──────────────────────────────────────────── */
+.qr-scan-btn { gap: 5px; }
+
+/* ── QR Scanner Modal ────────────────────────────────────────── */
+.qr-modal { width: 420px; max-width: 95vw; padding: 0; overflow: hidden; }
+
+.qr-modal-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 2px 0 0;
+}
+
+/* qr-viewfinder / qr-frame / qr-video — shared styles in index.css */
+
+/* ── QR Result Modal ─────────────────────────────────────────── */
+.qr-result-modal { padding: 0; overflow: hidden; }
+
+.qr-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--maroon-soft);
+  gap: 12px;
+}
+
+.qr-result-head-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.qr-result-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.qr-result-avatar {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--maroon);
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.qr-result-name  { font-size: 1rem; font-weight: 700; color: var(--text); margin: 0; }
+.qr-result-email { font-size: 0.78rem; color: var(--text-muted); margin: 2px 0 0; }
+
+.qr-verified-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #86efac;
+}
+
+.qr-no-pets {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.qr-pets {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+}
+
+.qr-pet-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.qr-pet-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--border);
+}
+
+.qr-pet-icon     { font-size: 1.2rem; flex-shrink: 0; }
+.qr-pet-identity { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.qr-pet-name     { font-weight: 700; font-size: 0.95rem; }
+.qr-pet-meta     { font-size: 0.75rem; color: var(--text-muted); }
+
+.qr-pet-doses {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--maroon-soft);
+  color: var(--maroon);
+  border: 1px solid rgba(122,31,43,0.2);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.qr-pet-vax {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qr-vax-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 0 12px;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+.qr-vax-label { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); }
+.qr-vax-val   { font-weight: 500; color: var(--text); }
+
+.qr-result-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+
+.qr-generated {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 /* ── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 860px) {
   .records-page  { padding: 18px 16px; }

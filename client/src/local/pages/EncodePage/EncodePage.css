@@ -609,6 +609,24 @@
   font-size: 15px;
 }
 
+/* ── QR choice button ────────────────────────────────────────── */
+.encode-choice-btn--qr {
+  border-color: var(--maroon);
+  background: var(--maroon-soft);
+}
+.encode-choice-btn--qr:hover { background: rgba(122,31,43,0.12); }
+
+.encode-choice-icon--qr {
+  background: var(--maroon);
+  color: #fff;
+  font-style: normal;
+}
+
+.drive-qr-btn { white-space: nowrap; }
+
+/* ── QR scanner modal (shared styles via RecordsPage.css, but scoped here too) */
+.encode-qr-modal { width: 420px; max-width: 95vw; padding: 0; overflow: hidden; }
+
 @media (max-width: 720px) {
   .encode-form, .encode-form--wide { grid-template-columns: 1fr; }
   .session-banner { flex-direction: column; align-items: flex-start; }
